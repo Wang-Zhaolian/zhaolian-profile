@@ -35,7 +35,12 @@ FIELD_DEFINITIONS: dict[str, list[dict[str, Any]]] = {
         ("gpa", "GPA", "text", True), ("gpa_scale", "GPA 满分", "text", True),
         ("rank", "排名", "text", True), ("rank_total", "总人数", "text", True),
         ("honors", "荣誉", "list", True), ("location", "地点", "text", True),
+        ("institution_zh", "学校中文名", "text", True),
+        ("degree_zh", "学位中文名", "text", True),
+        ("major_zh", "专业中文名", "text", True),
         ("cv_bullets", "用于简历的要点", "list", True),
+        ("cv_bullets_en", "英文简历要点", "list", True),
+        ("cv_bullets_zh", "中文简历要点", "list", True),
     ],
     "research": [
         ("title", "科研名称", "text", False), ("institution", "学校或机构", "text", False),
@@ -54,6 +59,11 @@ FIELD_DEFINITIONS: dict[str, list[dict[str, Any]]] = {
         ("repository", "代码仓库链接", "url", True),
         ("evidence", "证明材料路径或网址", "list", True),
         ("cv_bullets", "用于简历的要点", "list", True),
+        ("title_zh", "科研名称中文译文", "text", True),
+        ("description_zh", "经历描述中文译文", "textarea", True),
+        ("raw_details", "详细经历（原始事实）", "textarea", True),
+        ("cv_bullets_en", "英文简历要点", "list", True),
+        ("cv_bullets_zh", "中文简历要点", "list", True),
     ],
     "publications": [
         ("title", "论文标题", "text", False), ("authors", "作者（每行一位）", "list", False),
@@ -64,6 +74,8 @@ FIELD_DEFINITIONS: dict[str, list[dict[str, Any]]] = {
         ("arxiv", "arXiv 编号", "text", True),
         ("research_id", "关联科研", "relation_one:research", True),
         ("citation", "引用格式", "textarea", True), ("notes", "备注", "textarea", True),
+        ("title_zh", "论文标题中文译文", "text", True),
+        ("cv_bullets", "用于简历的要点", "list", True),
     ],
     "projects": [
         ("name", "项目名称", "text", False), ("type", "项目类型", "text", False),
@@ -76,6 +88,8 @@ FIELD_DEFINITIONS: dict[str, list[dict[str, Any]]] = {
         ("results", "结果", "list", True), ("skill_ids", "关联技能", "relation:skills", True),
         ("competition_ids", "关联竞赛", "relation:competitions", True),
         ("cv_bullets", "用于简历的要点", "list", True),
+        ("name_zh", "项目名称中文译文", "text", True),
+        ("raw_details", "详细项目经历（原始事实）", "textarea", True),
     ],
     "awards": [
         ("name", "奖项名称", "text", False), ("level", "级别", "text", False),

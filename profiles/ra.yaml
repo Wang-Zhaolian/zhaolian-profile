@@ -1,7 +1,7 @@
 version: 1
 profile: ra
 display_name: Research Assistant Application
-language: en
+language: zh
 selection:
   max_priority: 3
   exclude_tags: [internal_only]
@@ -31,4 +31,3 @@ sections:
     title: Selected Coursework
     max_items: 6
     max_priority: 2
-

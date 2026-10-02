@@ -1,7 +1,7 @@
 version: 1
 profile: domestic
 display_name: Domestic Graduate Application
-language: en
+language: zh
 selection:
   max_priority: 4
   exclude_tags: [internal_only]
@@ -34,4 +34,3 @@ sections:
   - id: skills
     title: Technical Skills
     max_items: 12
-

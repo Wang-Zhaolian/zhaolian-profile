@@ -1,7 +1,7 @@
 version: 1
 profile: phd
 display_name: PhD Application
-language: en
+language: zh
 selection:
   max_priority: 3
   exclude_tags: [internal_only]
@@ -36,4 +36,3 @@ sections:
     title: Technical Skills
     max_items: 12
     max_priority: 4
-

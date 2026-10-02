@@ -1,16 +1,19 @@
-# Academic Profile CV Database and Generator
+# 昭濂学术档案
 
 `academic-profile` 是运行在个人 Windows 电脑上的学术履历平台。日常通过浏览器界面录入和整理资料；程序把记录保存在可读的 YAML 文件中，并按申请场景生成简历。`data/` 是唯一权威数据源；任何 CV 都不需要再手工维护一份。
 
-平台只监听本机，不依赖数据库服务器或网络即可录入、保存和导出。需要备份时，手动点击界面中的“备份到 GitHub”；首次备份会在当前 GitHub 登录账户中创建 Private 仓库。真实分类文件初始为空，界面不会读取或展示演示数据。
+平台只监听本机，不依赖数据库服务器或网络即可录入、保存和导出。需要备份时，手动点击界面中的“备份到 GitHub”；备份前会核验 `Wang-Zhaolian/academic-profile` 是 Private 仓库并确认远程目标匹配。真实分类文件初始为空，界面不会读取或展示演示数据。
 
 ## 日常使用
 
-- 双击桌面上的 **Academic Profile** 快捷方式打开平台。首次制作本机程序包时运行一次 `scripts/build_windows.ps1`；日常使用不需要命令行、Python 或 LaTeX。
+- 双击桌面上的 **昭濂学术档案** 快捷方式打开平台。首次制作本机程序包时运行一次 `scripts/build_windows.ps1`；日常使用不需要命令行、Python 或 LaTeX。
 - 在“个人资料”中填写姓名；在左侧固定分类中逐条新增记录。可以先保存为草稿，以后补全后再选择“整理完成”。
 - 只有整理完成且勾选“用于简历”的记录会进入简历预览。可切换博士申请、科研助理、暑期科研、国内升学和实习版本。
 - 预览确认后可下载 PDF、Word 或 LaTeX。PDF 由内置排版生成，不要求安装 LaTeX。
-- 平台自动保存到项目目录。联系方式放在本机 `private/contact.yaml`；证明材料请在记录中写本地路径或网址。它们不会上传 GitHub。
+- 在“快速录入”中粘贴经历笔记，可选择使用 ChatGPT 订阅版拆分和整理多条候选经历。逐项审核后才写入，默认保存为草稿；AI 不会替你补造未知事实。
+- 首次使用 AI 时，点击“使用 ChatGPT 登录”并在浏览器完成授权。仅连接 ChatGPT；连接或额度不可用时会说明原因，不会切换到其他收费服务。AI 请求只会发送本次输入的文字、你主动选择的附件，以及履历中的学术文字；不会发送联系方式、未选附件、本机路径或旧笔记，也不能读取 ChatGPT 对话。符合条件的账号才能使用订阅额度；具体权限由登录及请求结果确认。
+- 素材箱支持文字与 PNG、JPG、WEBP、PDF、DOCX、XLSX、PPTX、TXT 和 Markdown 混合录入。原始笔记和附件仅保存在本机 `private/ai_notes/`；Office 文档会在你发起 AI 整理时尝试通过本机 Office 转为 PDF。超出单次限制时请拆分文件或分批选择，平台不会静默截断。ChatGPT 授权令牌以 Windows 当前用户保护方式保存在 `%LOCALAPPDATA%/AcademicProfile/chatgpt/`。原笔记、附件和令牌都不会进入 GitHub 备份。
+- 平台自动保存到项目目录。联系方式（包括电话号码）放在本机 `private/contact.yaml`；证明材料请在记录中写本地路径或网址。它们不会上传 GitHub。
 - “备份与设置”会清楚显示仓库、待备份状态和上次成功时间。遇到网络、权限或远端冲突时，本机资料仍会保留；冲突不会强制覆盖。
 
 ## 系统流程
@@ -21,6 +24,11 @@ data/*.yaml
     -> profile selection and deterministic CV lint
     -> shared CV content model
     -> cv.tex, cv.docx, and an embedded-layout cv.pdf
+
+local note + sanitized academic context
+    -> ChatGPT subscription Responses API
+    -> user-reviewed draft candidates
+    -> data/*.yaml
 ```
 
 预览、PDF、Word 和 LaTeX 共用同一份筛选结果，因此各格式内容一致。版式允许略有差异。
@@ -30,7 +38,7 @@ data/*.yaml
 ```text
 academic-profile/
 ├── data/                 真实 Master Academic Record，初始为空
-├── private/              本地联系方式；contact.yaml 被 Git 忽略
+├── private/              本地联系方式、AI 授权与原笔记；均被 Git 忽略
 ├── evidence/             成绩单、证书、未发表材料等；内容默认被 Git 忽略
 ├── profiles/             五种申请场景的章节顺序与筛选规则
 ├── schemas/              每类 YAML 的 JSON Schema 2020-12 约束
@@ -104,7 +112,7 @@ uv run academic-profile generate all `
   research_id: research_001
 ```
 
-日期只能使用 `YYYY-MM` 或 `YYYY-MM-DD`。生成时会自动显示为 `Sep 2026 - Present` 等格式。英文为主字段；只在需要时增加 `title_zh`、`description_zh` 或 `cv_bullets_zh`，没有中文字段时自动回退到英文。
+日期只能使用 `YYYY-MM` 或 `YYYY-MM-DD`。平台默认生成中文简历，也可以切换英文；缺少所选语言字段时会显示已有语言内容并在预览中提示，不自动翻译。中文姓名即可生成中文简历；需要英文申请时可补充英文姓名和经历译文。
 
 详细字段、最小记录示例、归档方法和交互式添加见 [ADD_RECORD.md](ADD_RECORD.md)。
 
@@ -228,6 +236,8 @@ gh repo create academic-profile --private --source . --remote origin --push
 ```
 
 推送前始终运行 `git status` 和 `git check-ignore private/contact.yaml evidence/your-file.pdf`。被忽略的私人内容包括 `private/contact.yaml`、`evidence/` 中的材料和全部 `output/`。`data/` 可能仍含 GPA、排名、导师与未发表论文信息，因此即使忽略联系方式，远程仓库也必须保持私有。
+
+AI 连接令牌位于 Windows 当前用户的 `%LOCALAPPDATA%/AcademicProfile/chatgpt/`，未处理的原始笔记位于 `private/ai_notes/`；两者都不在应用的 GitHub 备份清单里。采纳并保存到 `data/` 的结构化履历记录会按手动备份流程上传。
 
 ## 建议维护节奏
 

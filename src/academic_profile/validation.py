@@ -31,6 +31,23 @@ class ValidationIssue:
         return f"{self.severity.upper():7} {self.code:20} {self.location}: {self.message}"
 
 
+def _record_with_localized_required(item_schema: dict[str, Any], record: Any) -> Any:
+    if not isinstance(record, dict):
+        return record
+    normalized = dict(record)
+    for field in item_schema.get("required", []):
+        if field in normalized:
+            continue
+        alternate = next(
+            (record.get(f"{field}_{language}") for language in ("zh", "en")
+             if record.get(f"{field}_{language}") not in (None, "", [])),
+            None,
+        )
+        if alternate is not None:
+            normalized[field] = alternate
+    return normalized
+
+
 def _schema_issues(data_dir: Path, schema_dir: Path) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
     for name in ("basics", *DATA_CATEGORIES):
@@ -57,10 +74,11 @@ def _schema_issues(data_dir: Path, schema_dir: Path) -> list[ValidationIssue]:
         if name != "basics":
             records = instance.get("records", [])
             if isinstance(records, list):
+                item_schema = schema.get("properties", {}).get("records", {}).get("items", {})
                 instance = {
                     **instance,
                     "records": [
-                        record
+                        _record_with_localized_required(item_schema, record)
                         for record in records
                         if not isinstance(record, dict)
                         or record.get("record_state", "ready") != "draft"

@@ -30,6 +30,8 @@ def generate_profile(
     output_root: Path,
     contact_path: Path | None = None,
     formats: tuple[str, ...] = ("latex", "docx", "pdf"),
+    language: str | None = None,
+    include_phone: bool = True,
 ) -> GenerationResult:
     issues = validate_repository(data_dir, profile_dir, schema_dir)
     if has_errors(issues):
@@ -38,12 +40,17 @@ def generate_profile(
 
     data = load_master_data(data_dir)
     profile = load_profile(profile_dir, profile_name)
+    if language in {"zh", "en"}:
+        profile["language"] = language
     contact = load_contact(contact_path)
     sections = select_profile(data, profile)
-    context = build_document_context(data, profile, sections, contact)
+    context = build_document_context(
+        data, profile, sections, contact, language=language,
+        include_phone=include_phone,
+    )
     if context["name"] == "Name Required":
         raise DataValidationError(
-            "data/basics.yaml must contain name or name_en before generating a CV"
+            "请先在 data/basics.yaml 填写姓名（name_zh 或 name_en）后再生成简历。"
         )
 
     result = GenerationResult(profile=profile_name)
@@ -72,4 +79,3 @@ def generate_profile(
             result.outputs.append(pdf_path)
 
     return result
-

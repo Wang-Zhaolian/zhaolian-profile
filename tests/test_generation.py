@@ -20,6 +20,7 @@ def _generate(profile: str, output: Path, formats: tuple[str, ...], data_dir: Pa
         output_root=output,
         contact_path=None,
         formats=formats,
+        language="en",
     )
 
 

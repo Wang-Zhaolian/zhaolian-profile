@@ -78,7 +78,8 @@ def select_profile(
     for section in profile.get("sections", []):
         section_id = section["id"]
         if section_id == "research_interests":
-            interests = data.get("basics", {}).get("research_interests", [])
+            basics = data.get("basics", {})
+            interests = basics.get("research_interests") or basics.get("research_interests_en", [])
             if interests:
                 selected_sections.append(
                     {**deepcopy(section), "items": list(interests)}

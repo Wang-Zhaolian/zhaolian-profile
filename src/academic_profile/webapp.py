@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import os
 import re
@@ -15,10 +16,18 @@ from typing import Any
 from urllib.parse import urlparse
 
 import yaml
-from flask import Flask, abort, jsonify, render_template, request, send_file
+from flask import Flask, abort, jsonify, redirect, render_template, request, send_file
 from jsonschema import Draft202012Validator
 
 from .backup import PRIVATE_PATHS, STAGE_PATHS, backup as do_backup, status as backup_status
+from .ai_provider import AIServiceError, ChatGPTProvider
+from .chatgpt_auth import ChatGPTAuth
+from .ai_workflow import build_context as build_ai_context
+from .ai_workflow import get_note as get_ai_note
+from .ai_workflow import list_notes as list_ai_notes
+from .ai_workflow import parse_proposals as parse_ai_proposals
+from .ai_workflow import save_note as save_ai_note
+from .file_inputs import MAX_FILE_BYTES, attachment_path, build_attachment_content
 from .content import build_document_context
 from .constants import DATA_CATEGORIES, PROFILE_NAMES, REFERENCE_FIELDS, REFERENCE_LIST_FIELDS
 from .dates import validate_date_string
@@ -39,6 +48,12 @@ ID_PREFIXES = {
 }
 TITLE_FIELDS = {item["id"]: item["title_field"] for item in CATEGORIES}
 PROFILE_LABELS = dict(PROFILE_LABELS)
+AI_BLOCKING_ERROR_CODES = {
+    "subscription_sharing_user_not_eligible",
+    "subscription_sharing_usage_limit_exceeded",
+    "subscription_sharing_invalid_user",
+    "chatpass_v2_scope_not_authorized",
+}
 _PATH_LOCKS: dict[Path, threading.RLock] = {}
 _PATH_LOCKS_GUARD = threading.Lock()
 
@@ -86,9 +101,9 @@ def _labels() -> dict[str, str]:
 def _record_title(category: str, record: dict[str, Any]) -> str:
     field = TITLE_FIELDS[category]
     return str(
-        record.get(f"{field}_en")
+        record.get(f"{field}_zh")
         or record.get(field)
-        or record.get(f"{field}_zh")
+        or record.get(f"{field}_en")
         or "未命名记录"
     )
 
@@ -146,11 +161,17 @@ def _validate_ready(home: Path, category: str, record: dict[str, Any]) -> dict[s
     record_schema = schema["properties"]["records"]["items"]
     errors: dict[str, str] = {}
     field_labels = {field[0]: field[1] for field in FIELD_DEFINITIONS[category]}
-    for error in Draft202012Validator(record_schema).iter_errors(record):
+    validation_record = dict(record)
+    for field in record_schema.get("required", []):
+        if field not in validation_record:
+            alternate = next((record.get(f"{field}_{language}") for language in ("zh", "en") if record.get(f"{field}_{language}") not in (None, "", [])), None)
+            if alternate is not None:
+                validation_record[field] = alternate
+    for error in Draft202012Validator(record_schema).iter_errors(validation_record):
         key = str(next(iter(error.absolute_path), "_form"))
         if error.validator == "required":
             missing = next(
-                (field for field in record_schema.get("required", []) if field not in record),
+                (field for field in record_schema.get("required", []) if field not in validation_record),
                 "_form",
             )
             key = missing
@@ -229,7 +250,14 @@ def _field_options(home: Path, category: str, field: dict[str, Any], data: dict[
     return output
 
 
-def create_app(home: Path, *, static_root: Path | None = None) -> Flask:
+def create_app(
+    home: Path,
+    *,
+    static_root: Path | None = None,
+    callback_port: int = 52847,
+    ai_auth: ChatGPTAuth | None = None,
+    ai_provider: ChatGPTProvider | None = None,
+) -> Flask:
     home = home.resolve()
     root = static_root or home
     ui_root = root / "templates"
@@ -240,6 +268,12 @@ def create_app(home: Path, *, static_root: Path | None = None) -> Flask:
         static_folder=str(static_dir),
     )
     app.config["HOME_ROOT"] = home
+    auth = ai_auth or ChatGPTAuth()
+    provider = ai_provider or ChatGPTProvider(auth)
+    app.config["AI_AUTH"] = auth
+    app.config["AI_PROVIDER"] = provider
+    app.config["AI_BLOCKED"] = None
+    app.config["MAX_CONTENT_LENGTH"] = 205 * 1024 * 1024
 
     @app.before_request
     def enforce_local_only() -> Any:
@@ -269,6 +303,196 @@ def create_app(home: Path, *, static_root: Path | None = None) -> Flask:
                 "local_paths": list(PRIVATE_PATHS),
                 "github_includes": list(STAGE_PATHS),
             },
+        })
+
+    @app.get("/auth/callback")
+    def chatgpt_callback() -> Any:
+        """Finish the SIWC redirect in the system browser without exposing tokens."""
+        auth_service: ChatGPTAuth = app.config["AI_AUTH"]
+        try:
+            auth_service.complete(request.args.to_dict(flat=True))
+        except AIServiceError as error:
+            message = html.escape(str(error))
+            return (
+                "<!doctype html><html lang='zh-CN'><meta charset='utf-8'>"
+                "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+                "<meta http-equiv='refresh' content='8;url=/'>"
+                "<title>ChatGPT 授权未完成</title><body style='font:16px system-ui;padding:32px'>"
+                "<h1>ChatGPT 授权未完成</h1><p>" + message + "</p>"
+                "<p><a href='/'>返回 Academic Profile</a></p></body></html>",
+                400,
+                {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store"},
+            )
+        response = redirect("/", code=303)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.get("/api/ai/status")
+    def ai_status() -> Any:
+        auth_service: ChatGPTAuth = app.config["AI_AUTH"]
+        status = auth_service.status()
+        blocked = app.config.get("AI_BLOCKED")
+        if blocked:
+            status.update(sharing=False, ai_blocked=True, error=blocked["message"], blocked_code=blocked["code"])
+        return jsonify(status)
+
+    @app.post("/api/ai/connect")
+    def ai_connect() -> Any:
+        auth_service: ChatGPTAuth = app.config["AI_AUTH"]
+        app.config["AI_BLOCKED"] = None
+        callback_uri = f"http://127.0.0.1:{callback_port}/auth/callback"
+        return jsonify({"authorization_url": auth_service.begin(callback_uri)})
+
+    @app.post("/api/ai/disconnect")
+    def ai_disconnect() -> Any:
+        auth_service: ChatGPTAuth = app.config["AI_AUTH"]
+        app.config["AI_BLOCKED"] = None
+        return jsonify(auth_service.disconnect())
+
+    @app.get("/api/ai/models")
+    def ai_models() -> Any:
+        blocked = app.config.get("AI_BLOCKED")
+        if blocked:
+            raise AIServiceError(blocked["message"], blocked["code"], status=403)
+        ai_service: ChatGPTProvider = app.config["AI_PROVIDER"]
+        return jsonify({"models": ai_service.list_models()})
+
+    @app.get("/api/ai/notes")
+    def ai_notes() -> Any:
+        return jsonify({"notes": list_ai_notes(app.config["HOME_ROOT"])})
+
+    @app.post("/api/ai/notes")
+    def create_ai_note() -> Any:
+        uploads: list[tuple[str, bytes]] = []
+        if request.mimetype == "multipart/form-data":
+            text_value = request.form.get("text", "")
+            files = request.files.getlist("files")
+            if len(files) > 10:
+                return jsonify({"error": "一条素材最多可添加 10 个文件。", "code": "too_many_files"}), 422
+            for file in files:
+                if not file.filename:
+                    continue
+                content = file.stream.read(MAX_FILE_BYTES + 1)
+                uploads.append((file.filename, content))
+        else:
+            payload = request.get_json(silent=True) or {}
+            if not isinstance(payload, dict):
+                return jsonify({"error": "笔记内容格式不正确。", "code": "invalid_note"}), 400
+            text_value = payload.get("text", "")
+        try:
+            note = save_ai_note(app.config["HOME_ROOT"], text_value, uploads)
+        except ValueError as exc:
+            return jsonify({"error": str(exc), "code": "invalid_note"}), 422
+        return jsonify({"note": note}), 201
+
+    @app.get("/api/ai/notes/<note_id>")
+    def get_ai_note_route(note_id: str) -> Any:
+        try:
+            note = get_ai_note(app.config["HOME_ROOT"], note_id)
+        except (ValueError, FileNotFoundError):
+            return jsonify({"error": "没有找到这条本机笔记。", "code": "note_missing"}), 404
+        return jsonify({"note": note})
+
+    @app.get("/api/ai/notes/<note_id>/attachments/<attachment_id>")
+    def get_ai_attachment(note_id: str, attachment_id: str) -> Any:
+        try:
+            note = get_ai_note(app.config["HOME_ROOT"], note_id, include_storage=True)
+            attachment = next((item for item in note.get("attachments", []) if item.get("id") == attachment_id), None)
+            if not attachment:
+                raise FileNotFoundError
+            path = attachment_path(app.config["HOME_ROOT"], note_id, attachment)
+        except (ValueError, FileNotFoundError):
+            return jsonify({"error": "没有找到这份本机附件。", "code": "attachment_missing"}), 404
+        return send_file(path, as_attachment=True, download_name=attachment.get("name", "attachment"), mimetype=attachment.get("mime_type", "application/octet-stream"))
+
+    @app.post("/api/ai/proposals")
+    def ai_proposals() -> Any:
+        home_root: Path = app.config["HOME_ROOT"]
+        auth_service: ChatGPTAuth = app.config["AI_AUTH"]
+        ai_service: ChatGPTProvider = app.config["AI_PROVIDER"]
+        blocked = app.config.get("AI_BLOCKED")
+        if blocked:
+            raise AIServiceError(blocked["message"], blocked["code"], status=403)
+        if not auth_service.status().get("sharing"):
+            return jsonify({"error": "请先连接具有 ChatGPT 方案使用权限的账号。", "code": "chatgpt_not_connected"}), 409
+        payload = request.get_json(silent=True) or {}
+        if not isinstance(payload, dict):
+            return jsonify({"error": "AI 请求格式不正确。", "code": "invalid_request"}), 400
+        note_id = str(payload.get("note_id", "")).strip()
+        if not note_id:
+            return jsonify({"error": "请先保存要整理的原始笔记。", "code": "note_required"}), 400
+        note = get_ai_note(home_root, note_id, include_storage=True)
+        models = ai_service.list_models()
+        requested_model = str(payload.get("model", "")).strip()
+        model = requested_model or (models[0]["slug"] if models else "")
+        if not model or model not in {item.get("slug") for item in models}:
+            return jsonify({"error": "所选模型当前不可用，请刷新模型列表后重试。", "code": "model_unavailable"}), 409
+
+        if "attachment_ids" in payload:
+            attachment_ids = payload.get("attachment_ids")
+            if not isinstance(attachment_ids, list) or any(not isinstance(item, str) for item in attachment_ids):
+                return jsonify({"error": "附件选择格式不正确。", "code": "invalid_attachments"}), 400
+        else:
+            attachment_ids = [item.get("id", "") for item in note.get("attachments", [])]
+        selected_attachments = [item for item in note.get("attachments", []) if item.get("id") in attachment_ids]
+        if len(selected_attachments) != len(set(attachment_ids)):
+            return jsonify({"error": "所选附件与这条素材不匹配，请刷新页面后重试。", "code": "invalid_attachments"}), 400
+
+        context_note = note["text"] or "请根据本次选中的附件中的原始事实，整理学术履历候选记录。"
+        try:
+            context = build_ai_context(home_root, context_note)
+        except ValueError as exc:
+            return jsonify({"error": str(exc), "code": "context_too_large"}), 422
+        try:
+            attachment_content = build_attachment_content(home_root, note, attachment_ids)
+        except ValueError as exc:
+            return jsonify({"error": str(exc), "code": "attachment_limit"}), 422
+        categories = [
+            {
+                "id": category["id"], "label": category["label"],
+                "fields": [
+                    {"key": field[0], "label": field[1], "type": field[2]}
+                    for field in FIELD_DEFINITIONS[category["id"]]
+                ],
+            }
+            for category in CATEGORIES
+        ]
+        instructions = (
+            "你是昭濂学术档案的学术履历整理助手。优先用中文理解和提出候选资料；仅根据用户给出的本次笔记、附件和既有学术记录；"
+            "不得编造、推断或补全未提供的事实。把一段笔记拆成零条或多条独立候选记录，"
+            "字段只能来自下列分类及字段清单。未知信息省略，不写占位事实。保留论文真实状态。"
+            "中文是首选，不得自动翻译或填造未知事实；保留原始论文状态。source_excerpt 如来自文字笔记，必须是其中逐字片段。"
+            "如来自附件，在 source_references 中引用本次提供的 attachment_id、页码（适用时）和简短原文摘录。"
+            "仅输出 JSON 对象 {\"candidates\":[{\"category\":string,\"fields\":object,"
+            "\"source_excerpt\":string,\"source_references\":[{\"attachment_id\":string,\"page\":number,\"excerpt\":string}],\"warnings\":[string]}]}，不要 Markdown。\n"
+            "允许的分类与字段：" + json.dumps(categories, ensure_ascii=False)
+        )
+        input_text = json.dumps({
+            "new_note": context["note_text"],
+            "academic_profile": context["profile"],
+            "context_mode": context["mode"],
+            "academic_records": context["records"],
+            "academic_record_synopsis": context["synopsis"],
+            "selected_attachments": [
+                {"attachment_id": item["id"], "filename": item["name"], "mime_type": item["mime_type"]}
+                for item in selected_attachments
+            ],
+        }, ensure_ascii=False)
+        request_content = [{"type": "input_text", "text": input_text}, *attachment_content]
+        if attachment_content and hasattr(ai_service, "complete_content"):
+            response_text = ai_service.complete_content(model, instructions, request_content)
+        else:
+            response_text = ai_service.complete_text(model, instructions, input_text)
+        try:
+            candidates = parse_ai_proposals(home_root, response_text, note["text"], selected_attachments)
+        except ValueError as exc:
+            return jsonify({"error": str(exc), "code": "invalid_ai_response"}), 502
+        return jsonify({
+            "candidates": candidates,
+            "context_mode": context["mode"],
+            "records_count": context["record_count"],
+            "full_record_count": context["full_record_count"],
+            "note_id": note_id,
         })
 
     @app.get("/api/dashboard")
@@ -305,7 +529,7 @@ def create_app(home: Path, *, static_root: Path | None = None) -> Flask:
             ) if issue.severity == "error"
         ]
         return jsonify({
-            "name": data["basics"].get("name_en") or data["basics"].get("name_zh") or "",
+            "name": data["basics"].get("name_zh") or data["basics"].get("name_en") or "",
             "counts": category_counts,
             "total": sum(item["count"] for item in category_counts),
             "drafts": drafts,
@@ -385,16 +609,22 @@ def create_app(home: Path, *, static_root: Path | None = None) -> Flask:
         if profile_name not in PROFILE_NAMES:
             abort(404)
         home_root: Path = app.config["HOME_ROOT"]
+        language = request.args.get("lang", "zh")
+        if language not in {"zh", "en"}:
+            return jsonify({"ready": False, "message": "语言选项无效。"}), 400
+        include_phone = request.args.get("include_phone", "1") != "0"
         data = load_master_data(home_root / "data")
         basics = data["basics"]
         if not (basics.get("name_en") or basics.get("name_zh")):
             return jsonify({"ready": False, "message": "请先在「个人资料」中填写姓名。"}), 200
         try:
             profile = load_profile(home_root / "profiles", profile_name)
+            profile["language"] = language
             sections = select_profile(data, profile)
             context = build_document_context(
                 data, profile, sections,
                 load_contact(home_root / "private" / "contact.yaml"),
+                language=language, include_phone=include_phone,
             )
         except Exception as exc:
             return jsonify({"ready": False, "message": str(exc)}), 422
@@ -408,19 +638,28 @@ def create_app(home: Path, *, static_root: Path | None = None) -> Flask:
         if profile_name not in PROFILE_NAMES or format_name not in {"pdf", "docx", "latex"}:
             abort(404)
         home_root: Path = app.config["HOME_ROOT"]
+        language = request.args.get("lang", "zh")
+        if language not in {"zh", "en"}:
+            return jsonify({"error": "语言选项无效。"}), 400
+        include_phone = request.args.get("include_phone", "1") != "0"
         master_data = load_master_data(home_root / "data")
         basics = master_data["basics"]
         if not (basics.get("name_en") or basics.get("name_zh")):
             return jsonify({"error": "请先在「个人资料」中填写姓名。"}), 422
         profile_config = load_profile(home_root / "profiles", profile_name)
+        profile_config["language"] = language
         selected = select_profile(master_data, profile_config)
         if not any(section["items"] for section in selected):
             return jsonify({"error": "目前没有可用于此版本的完整经历。请整理记录并勾选“用于简历”。"}), 422
         output_dir = home_root / "output" / "platform" / profile_name
         if format_name == "pdf":
-            context = build_document_context(master_data, profile_config, selected, load_contact(home_root / "private" / "contact.yaml"))
+            context = build_document_context(
+                master_data, profile_config, selected,
+                load_contact(home_root / "private" / "contact.yaml"),
+                language=language, include_phone=include_phone,
+            )
             path = render_pdf(context, output_dir / "cv.pdf")
-            return send_file(path, as_attachment=True, download_name=f"academic-cv-{profile_name}.pdf", mimetype="application/pdf")
+            return send_file(path, as_attachment=True, download_name=f"zhaolian-cv-{profile_name}.pdf", mimetype="application/pdf")
         generate_profile(
             profile_name,
             data_dir=home_root / "data", profile_dir=home_root / "profiles",
@@ -428,12 +667,13 @@ def create_app(home: Path, *, static_root: Path | None = None) -> Flask:
             output_root=home_root / "output" / "platform",
             contact_path=home_root / "private" / "contact.yaml",
             formats=(format_name,),
+            language=language, include_phone=include_phone,
         )
         path = output_dir / ("cv.docx" if format_name == "docx" else "cv.tex")
         if not path.exists():
             return jsonify({"error": "无法生成所选格式。"}), 500
         mimetype = "application/vnd.openxmlformats-officedocument.wordprocessingml.document" if format_name == "docx" else "application/x-tex"
-        return send_file(path, as_attachment=True, download_name=f"academic-cv-{profile_name}.{format_name}", mimetype=mimetype)
+        return send_file(path, as_attachment=True, download_name=f"zhaolian-cv-{profile_name}.{format_name}", mimetype=mimetype)
 
     @app.get("/api/backup/status")
     def get_backup_status() -> Any:
@@ -462,6 +702,20 @@ def create_app(home: Path, *, static_root: Path | None = None) -> Flask:
     def handle_profile_error(error: AcademicProfileError) -> Any:
         return jsonify({"error": str(error)}), 422
 
+    @app.errorhandler(AIServiceError)
+    def handle_ai_service_error(error: AIServiceError) -> Any:
+        if error.code in AI_BLOCKING_ERROR_CODES:
+            app.config["AI_BLOCKED"] = {"code": error.code, "message": str(error)}
+        status = error.status if error.status and 400 <= error.status <= 599 else 502
+        payload = {"error": str(error), "code": error.code}
+        if error.request_id:
+            payload["request_id"] = error.request_id
+        return jsonify(payload), status
+
+    @app.errorhandler(413)
+    def request_too_large(error: Any) -> Any:
+        return jsonify({"error": "本条素材附件总量超过 200 MB，请拆分为多条素材后保存。", "code": "upload_too_large"}), 413
+
     @app.errorhandler(404)
     def not_found(error: Any) -> Any:
         return jsonify({"error": "没有找到这项内容。"}), 404
@@ -473,7 +727,9 @@ def _backup_json(result: Any) -> dict[str, Any]:
     return {
         "repository": result.repository,
         "is_private": result.is_private,
+        "origin_matches": result.origin_matches,
         "pending": result.pending,
+        "pending_commits": result.pending_commits,
         "last_successful_backup": result.last_successful_backup,
         "message": result.message,
     }
@@ -565,10 +821,10 @@ def _save_basics_locked(home: Path, payload: dict[str, Any]) -> Any:
     contact_values = payload.get("contact", {})
     if not isinstance(basics_values, dict) or not isinstance(contact_values, dict):
         return jsonify({"error": "个人资料格式不正确。"}), 400
-    for key in {"name_en", "name_zh", "headline_en", "headline_zh", "research_interests"}:
+    for key in {"name_en", "name_zh", "headline_en", "headline_zh", "research_interests", "research_interests_en"}:
         if key in basics_values:
             basics[key] = basics_values[key] if basics_values[key] is not None else ""
-    for key in {"email", "github", "website", "location"}:
+    for key in {"email", "phone", "github", "website", "location"}:
         if key in contact_values:
             value = contact_values[key]
             if value:

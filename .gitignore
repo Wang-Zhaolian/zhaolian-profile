@@ -13,6 +13,8 @@ private/contact.yaml
 private/*.local.yaml
 private/runtime.local.*
 private/desktop-server.local.json
+private/ai/
+private/ai_notes/
 evidence/*
 !evidence/README.md
 !evidence/.gitignore

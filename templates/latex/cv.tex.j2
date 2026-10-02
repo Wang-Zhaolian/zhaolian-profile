@@ -9,6 +9,13 @@
 \else
   \usepackage{fontspec}
   \setmainfont{TeX Gyre Heros}
+  \ifXeTeX
+    \usepackage{xeCJK}
+    \setCJKmainfont{Microsoft YaHei}
+  \else
+    \usepackage{luatexja-fontspec}
+    \setmainjfont{Microsoft YaHei}
+  \fi
 \fi
 \usepackage{enumitem}
 \usepackage{hyperref}
@@ -66,4 +73,3 @@
 ((* endfor *))
 
 \end{document}
-

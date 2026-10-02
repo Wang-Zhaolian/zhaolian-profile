@@ -4,20 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>个人学术履历</title>
+  <title>昭濂学术档案</title>
+  <link rel="icon" type="image/png" href="/static/branding/favicon.png">
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
   <div class="app-shell">
     <aside class="sidebar" aria-label="主导航">
-      <button class="brand" data-view="dashboard" aria-label="返回总览">
-        <span class="brand-mark">AP</span>
-        <span class="brand-copy"><strong>学术履历</strong><small>个人资料库</small></span>
+      <button class="brand" data-view="dashboard" aria-label="返回总览" title="学术履历总览">
+        <img class="brand-mark" src="/static/branding/zhaolian-app.png" alt="">
+        <span class="brand-copy"><strong>昭濂学术档案</strong><small>个人履历工作台</small></span>
       </button>
 
       <div class="nav-caption">工作台</div>
       <nav id="primary-nav" class="nav-list">
         <button class="nav-item" data-view="dashboard"><span class="nav-icon">◫</span><span>总览</span></button>
+        <button class="nav-item" data-view="notes"><span class="nav-icon">✎</span><span>素材箱</span></button>
         <button class="nav-item" data-view="basics"><span class="nav-icon">○</span><span>个人资料</span></button>
       </nav>
 
@@ -35,16 +37,16 @@
 
     <main class="main-area">
       <header class="topbar">
-        <div class="breadcrumbs"><span>学术履历</span><span class="crumb-divider">/</span><strong id="page-breadcrumb">总览</strong></div>
-        <div class="topbar-right"><span class="autosave-label"><span class="local-dot"></span>本机模式</span><button class="avatar" data-view="basics" aria-label="个人资料">我</button></div>
+        <div class="topbar-left"><button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="收起分类导航" aria-expanded="true" title="收起或展开导航">☷</button><div class="breadcrumbs"><span>学术履历</span><span class="crumb-divider">/</span><strong id="page-breadcrumb">总览</strong></div></div>
+        <div class="topbar-right"><button id="ai-status-pill" class="ai-status-pill" type="button" data-view="settings" title="查看 ChatGPT 连接状态"><span class="ai-status-dot"></span><span id="ai-status-text">ChatGPT 未连接</span></button><span class="autosave-label"><span class="local-dot"></span>本机模式</span><button class="avatar" data-view="basics" aria-label="个人资料">我</button></div>
       </header>
       <div id="app-content" class="content-area" tabindex="-1"></div>
     </main>
   </div>
 
   <div id="modal-host"></div>
+  <div id="ai-review-host"></div>
   <div id="toast-host" class="toast-host" aria-live="polite"></div>
   <script src="/static/app.js" defer></script>
 </body>
 </html>
-

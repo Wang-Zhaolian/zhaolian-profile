@@ -55,7 +55,7 @@ def _serve(home: Path, port: int) -> int:
     os.replace(temp, marker)
     frozen_root = Path(getattr(sys, "_MEIPASS", _default_home()))
     try:
-        app = create_app(home, static_root=frozen_root)
+        app = create_app(home, static_root=frozen_root, callback_port=port)
         serve(app, host="127.0.0.1", port=port, threads=6, ident="AcademicProfile")
     finally:
         marker.unlink(missing_ok=True)
@@ -107,7 +107,7 @@ def _desktop(home: Path) -> int:
         ctypes.windll.user32.MessageBoxW(
             None,
             f"平台启动失败。详细信息保存在：\n{log_path}",
-            "Academic Profile",
+            "昭濂学术档案",
             0x10,
         )
     except Exception:
@@ -116,7 +116,7 @@ def _desktop(home: Path) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="Academic Profile")
+    parser = argparse.ArgumentParser(prog="昭濂学术档案")
     parser.add_argument("--serve", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--home", type=Path, default=_default_home(), help=argparse.SUPPRESS)
     parser.add_argument("--port", type=int, default=PORT, help=argparse.SUPPRESS)

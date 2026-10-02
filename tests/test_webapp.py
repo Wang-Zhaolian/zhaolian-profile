@@ -118,7 +118,7 @@ def test_all_five_profiles_export_pdf_word_and_latex_from_same_selection(tmp_pat
         assert preview["ready"] is True
         assert preview["items"] == 1
         for format_name in ("pdf", "docx", "latex"):
-            response = _post(client, f"/api/cv/{profile}/export/{format_name}", {})
+            response = _post(client, f"/api/cv/{profile}/export/{format_name}?lang=en", {})
             assert response.status_code == 200
             data = response.data
             if format_name == "pdf":
@@ -131,6 +131,43 @@ def test_all_five_profiles_export_pdf_word_and_latex_from_same_selection(tmp_pat
                 text = data.decode("utf-8")
                 assert "Example Student" in text
                 assert "BS in Computer Science" in text
+
+
+def test_chinese_only_profile_can_preview_and_phone_can_be_hidden(tmp_path: Path) -> None:
+    client = _client(tmp_path / "home")
+    basics = client.get("/api/basics").get_json()
+    saved_basics = _post(client, "/api/basics", {
+        "revision": basics["revision"],
+        "basics": {
+            "name_en": "", "name_zh": "测试者", "research_interests": ["计算机视觉"],
+            "research_interests_en": [],
+        },
+        "contact": {"phone": "+86 138 0000 0000"},
+    })
+    assert saved_basics.status_code == 200
+    records = client.get("/api/records/education").get_json()
+    ready = _post(client, "/api/records/education", {
+        "revision": records["revision"],
+        "record": {
+            "institution_zh": "示例大学", "degree_zh": "学士", "major_zh": "计算机科学",
+            "start_date": "2022-09", "expected_graduation": "2026-06",
+            "record_state": "ready", "cv_eligible": True, "priority": 1,
+        },
+    })
+    assert ready.status_code == 200
+    preview = client.get("/api/cv/phd").get_json()
+    assert preview["ready"] is True
+    assert preview["context"]["name"] == "测试者"
+    assert preview["context"]["contact"] == [{"label": "电话", "value": "+86 138 0000 0000"}]
+    assert "计算机视觉" in str(preview["context"])
+
+    english = client.get("/api/cv/phd?lang=en&include_phone=0").get_json()
+    assert english["ready"] is True
+    assert any("姓名" in warning for warning in english["context"]["warnings"])
+    assert english["context"]["contact"] == []
+    exported = _post(client, "/api/cv/phd/export/latex?lang=en&include_phone=0", {})
+    assert exported.status_code == 200
+    assert "+86 138 0000 0000" not in exported.get_data(as_text=True)
 
 
 def test_archive_restore_and_local_only_access(tmp_path: Path) -> None:
