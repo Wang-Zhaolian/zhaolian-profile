@@ -36,7 +36,7 @@ DISCOVERY_URL = f"{AUTHORITY}/.well-known/openid-configuration"
 RESOURCE = "https://api.openai.com/v1"
 SCOPES = "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct"
 DIRECT_SCOPE = "chatgpt.tokens.use.direct"
-APP_NAME = "Academic Profile"
+APP_NAME = "昭濂学术档案"
 _TIMEOUT = 25
 
 
@@ -137,7 +137,7 @@ class WindowsDPAPI:
         destination = _DATA_BLOB()
         method = self.crypt32.CryptProtectData if protect else self.crypt32.CryptUnprotectData
         if protect:
-            success = method(ctypes.byref(source), "Academic Profile", None, None, None, 1, ctypes.byref(destination))
+            success = method(ctypes.byref(source), APP_NAME, None, None, None, 1, ctypes.byref(destination))
         else:
             success = method(ctypes.byref(source), None, None, None, None, 1, ctypes.byref(destination))
         if not success:

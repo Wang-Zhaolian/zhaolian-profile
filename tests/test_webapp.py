@@ -42,6 +42,7 @@ def _create_education(client, *, state: str, degree: str, revision: str):
 
 def test_empty_platform_and_incomplete_draft_do_not_block_cv(tmp_path: Path) -> None:
     client = _client(tmp_path / "home")
+    assert client.get("/api/health").get_json()["version"] == "0.1.1"
     dashboard = client.get("/api/dashboard").get_json()
     assert dashboard["total"] == 0
     assert all(item["count"] == 0 for item in dashboard["counts"])

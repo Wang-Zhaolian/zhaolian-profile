@@ -14,6 +14,7 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
+from . import __version__
 from .webapp import create_app
 
 PORT = 52847
@@ -36,13 +37,28 @@ def _health(port: int) -> bool:
             if response.status != 200:
                 return False
             payload = json.loads(response.read().decode("utf-8"))
-            return payload.get("name") == "academic-profile"
+            return payload.get("name") == "academic-profile" and payload.get("version") == __version__
     except (OSError, urllib.error.URLError):
         return False
 
 
 def _runtime_root(home: Path) -> Path:
     return home / ".runtime"
+
+
+def _port_available(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        try:
+            listener.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
+
+
+def _unused_local_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", 0))
+        return int(listener.getsockname()[1])
 
 
 def _serve(home: Path, port: int) -> int:
@@ -58,7 +74,12 @@ def _serve(home: Path, port: int) -> int:
         app = create_app(home, static_root=frozen_root, callback_port=port)
         serve(app, host="127.0.0.1", port=port, threads=6, ident="AcademicProfile")
     finally:
-        marker.unlink(missing_ok=True)
+        try:
+            current_marker = json.loads(marker.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            current_marker = {}
+        if current_marker.get("pid") == os.getpid():
+            marker.unlink(missing_ok=True)
     return 0
 
 
@@ -77,10 +98,12 @@ def _desktop(home: Path) -> int:
         webbrowser.open(f"http://127.0.0.1:{PORT}/", new=1)
         return 0
 
+    port = PORT if _port_available(PORT) else _unused_local_port()
+
     if getattr(sys, "frozen", False):
-        command = [sys.executable, "--serve", "--home", str(home), "--port", str(PORT)]
+        command = [sys.executable, "--serve", "--home", str(home), "--port", str(port)]
     else:
-        command = [sys.executable, "-m", "academic_profile.desktop", "--serve", "--home", str(home), "--port", str(PORT)]
+        command = [sys.executable, "-m", "academic_profile.desktop", "--serve", "--home", str(home), "--port", str(port)]
 
     runtime = _runtime_root(home)
     runtime.mkdir(parents=True, exist_ok=True)
@@ -98,8 +121,8 @@ def _desktop(home: Path) -> int:
         )
 
     for _ in range(80):
-        if _health(PORT):
-            webbrowser.open(f"http://127.0.0.1:{PORT}/", new=1)
+        if _health(port):
+            webbrowser.open(f"http://127.0.0.1:{port}/", new=1)
             return 0
         time.sleep(0.25)
     try:

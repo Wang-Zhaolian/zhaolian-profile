@@ -26,12 +26,12 @@ analysis = Analysis(
 )
 pyz = PYZ(analysis.pure)
 exe = EXE(
-    pyz, analysis.scripts, [], exclude_binaries=True, name="AcademicProfile-0.1.0",
+    pyz, analysis.scripts, [], exclude_binaries=True, name="AcademicProfile-0.1.1",
     icon=str(root / "static" / "branding" / "app.ico"),
     debug=False, bootloader_ignore_signals=False, strip=False, upx=True,
     console=False,
 )
 collection = COLLECT(
     exe, analysis.binaries, analysis.datas, strip=False, upx=True,
-    name="AcademicProfile-0.1.0",
+    name="AcademicProfile-0.1.1",
 )

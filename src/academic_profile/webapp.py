@@ -20,6 +20,7 @@ from flask import Flask, abort, jsonify, redirect, render_template, request, sen
 from jsonschema import Draft202012Validator
 
 from .backup import PRIVATE_PATHS, STAGE_PATHS, backup as do_backup, status as backup_status
+from . import __version__
 from .ai_provider import AIServiceError, ChatGPTProvider
 from .chatgpt_auth import ChatGPTAuth
 from .ai_workflow import build_context as build_ai_context
@@ -290,7 +291,7 @@ def create_app(
 
     @app.get("/api/health")
     def health() -> Any:
-        return jsonify({"ok": True, "name": "academic-profile"})
+        return jsonify({"ok": True, "name": "academic-profile", "version": __version__})
 
     @app.get("/api/config")
     def get_config() -> Any:
@@ -319,7 +320,7 @@ def create_app(
                 "<meta http-equiv='refresh' content='8;url=/'>"
                 "<title>ChatGPT 授权未完成</title><body style='font:16px system-ui;padding:32px'>"
                 "<h1>ChatGPT 授权未完成</h1><p>" + message + "</p>"
-                "<p><a href='/'>返回 Academic Profile</a></p></body></html>",
+                "<p><a href='/'>返回昭濂学术档案</a></p></body></html>",
                 400,
                 {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store"},
             )

@@ -11,7 +11,7 @@ New-Item -ItemType Directory -Path $buildDist -Force | Out-Null
 & '.venv\Scripts\pyinstaller.exe' --noconfirm --clean --distpath $buildDist --workpath 'build\pyinstaller' 'academic-profile.spec'
 if ($LASTEXITCODE -ne 0) { throw 'The Windows desktop build failed.' }
 
-$executable = Join-Path $buildDist 'AcademicProfile-0.1.0\AcademicProfile-0.1.0.exe'
+$executable = Join-Path $buildDist 'AcademicProfile-0.1.1\AcademicProfile-0.1.1.exe'
 if (-not (Test-Path -LiteralPath $executable)) { throw "Build output not found: $executable" }
 
 $desktopPath = [Environment]::GetFolderPath('Desktop')
