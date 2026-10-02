@@ -1,0 +1,42 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+title: Education Records
+type: object
+required: [version, records]
+properties:
+  version: {const: 1}
+  records:
+    type: array
+    items:
+      type: object
+      required: [id, institution, degree, major, start_date, expected_graduation, cv_eligible, priority, tags]
+      properties:
+        id: {type: string, pattern: '^education_[0-9]{3,}$'}
+        institution: {type: string, minLength: 1}
+        institution_en: {type: string, minLength: 1}
+        institution_zh: {type: string, minLength: 1}
+        school: {type: string}
+        degree: {type: string, minLength: 1}
+        degree_en: {type: string, minLength: 1}
+        degree_zh: {type: string, minLength: 1}
+        major: {type: string, minLength: 1}
+        major_en: {type: string, minLength: 1}
+        major_zh: {type: string, minLength: 1}
+        start_date: {type: string}
+        expected_graduation: {type: string}
+        gpa: {type: [number, string]}
+        gpa_scale: {type: [number, string]}
+        rank: {type: integer, minimum: 1}
+        rank_total: {type: integer, minimum: 1}
+        honors: {type: array, items: {type: string}}
+        location: {type: string}
+        cv_bullets: {type: array, items: {type: string}}
+        cv_bullets_en: {type: array, items: {type: string}}
+        cv_bullets_zh: {type: array, items: {type: string}}
+        cv_eligible: {type: boolean}
+        record_state: {enum: [draft, ready]}
+        priority: {type: integer, minimum: 1, maximum: 5}
+        tags: {type: array, items: {type: string}}
+        include_for: {type: object, additionalProperties: {type: boolean}}
+        archived: {type: boolean}
+      additionalProperties: true
+additionalProperties: false

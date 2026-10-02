@@ -1,0 +1,26 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+title: Skill Records
+type: object
+required: [version, records]
+properties:
+  version: {const: 1}
+  records:
+    type: array
+    items:
+      type: object
+      required: [id, category, items, cv_eligible, priority, tags]
+      properties:
+        id: {type: string, pattern: '^skill_[0-9]{3,}$'}
+        category: {enum: [Programming, ML, Data, Optimization, Research Tools, Development Tools, Languages]}
+        items: {type: array, minItems: 1, items: {type: string, minLength: 1}}
+        level: {type: string}
+        evidence: {type: array, items: {type: string}}
+        last_used: {type: string}
+        cv_eligible: {type: boolean}
+        record_state: {enum: [draft, ready]}
+        priority: {type: integer, minimum: 1, maximum: 5}
+        tags: {type: array, items: {type: string}}
+        include_for: {type: object, additionalProperties: {type: boolean}}
+        archived: {type: boolean}
+      additionalProperties: true
+additionalProperties: false

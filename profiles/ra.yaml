@@ -1,0 +1,34 @@
+version: 1
+profile: ra
+display_name: Research Assistant Application
+language: en
+selection:
+  max_priority: 3
+  exclude_tags: [internal_only]
+sections:
+  - id: education
+    title: Education
+    max_items: 2
+    max_priority: 4
+  - id: research
+    title: Research Experience
+    max_items: 6
+  - id: projects
+    title: Research and Reproduction Projects
+    max_items: 5
+  - id: publications
+    title: Publications and Manuscripts
+    max_items: 6
+    max_priority: 4
+  - id: presentations
+    title: Presentations
+    max_items: 4
+  - id: skills
+    title: Methods and Technical Skills
+    max_items: 12
+    max_priority: 4
+  - id: coursework
+    title: Selected Coursework
+    max_items: 6
+    max_priority: 2
+

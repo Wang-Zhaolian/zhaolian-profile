@@ -1,0 +1,38 @@
+# Generated CVs and build products
+output/
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+
+# Private data and evidence (examples remain tracked)
+private/contact.yaml
+private/*.local.yaml
+private/runtime.local.*
+private/desktop-server.local.json
+evidence/*
+!evidence/README.md
+!evidence/.gitignore
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.pytest-tmp/
+.runtime/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+~$*.docx

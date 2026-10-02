@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>个人学术履历</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="主导航">
+      <button class="brand" data-view="dashboard" aria-label="返回总览">
+        <span class="brand-mark">AP</span>
+        <span class="brand-copy"><strong>学术履历</strong><small>个人资料库</small></span>
+      </button>
+
+      <div class="nav-caption">工作台</div>
+      <nav id="primary-nav" class="nav-list">
+        <button class="nav-item" data-view="dashboard"><span class="nav-icon">◫</span><span>总览</span></button>
+        <button class="nav-item" data-view="basics"><span class="nav-icon">○</span><span>个人资料</span></button>
+      </nav>
+
+      <div class="nav-caption nav-caption-spaced">学术档案</div>
+      <nav id="category-nav" class="nav-list"></nav>
+
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-bottom">
+        <button class="nav-item" data-view="cv"><span class="nav-icon">▤</span><span>简历生成</span></button>
+        <button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span><span>备份与设置</span></button>
+        <div class="local-note"><span class="local-dot"></span><span>保存在这台电脑</span></div>
+        <button id="quit-button" class="quit-button" type="button">退出平台</button>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>学术履历</span><span class="crumb-divider">/</span><strong id="page-breadcrumb">总览</strong></div>
+        <div class="topbar-right"><span class="autosave-label"><span class="local-dot"></span>本机模式</span><button class="avatar" data-view="basics" aria-label="个人资料">我</button></div>
+      </header>
+      <div id="app-content" class="content-area" tabindex="-1"></div>
+    </main>
+  </div>
+
+  <div id="modal-host"></div>
+  <div id="toast-host" class="toast-host" aria-live="polite"></div>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
+

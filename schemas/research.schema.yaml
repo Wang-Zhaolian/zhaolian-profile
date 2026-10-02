@@ -1,0 +1,52 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+title: Research Records
+type: object
+required: [version, records]
+properties:
+  version: {const: 1}
+  records:
+    type: array
+    items:
+      type: object
+      required: [id, title, institution, start_date, status, cv_eligible, priority, tags]
+      properties:
+        id: {type: string, pattern: '^research_[0-9]{3,}$'}
+        title: {type: string, minLength: 1}
+        title_en: {type: string, minLength: 1}
+        title_zh: {type: string, minLength: 1}
+        institution: {type: string, minLength: 1}
+        advisor: {type: string}
+        start_date: {type: string}
+        end_date: {type: string}
+        status: {enum: [planned, active, idea, literature, method, experiment, writing, submitted, completed, archived]}
+        research_area: {type: string}
+        research_question: {type: string}
+        description: {type: string}
+        description_en: {type: string}
+        description_zh: {type: string}
+        raw_details: {type: [string, array]}
+        my_contribution: {type: [string, array]}
+        methods: {type: array, items: {type: string}}
+        tools: {type: array, items: {type: string}}
+        results: {type: array, items: {type: string}}
+        outputs: {type: array, items: {type: string}}
+        paper_ids: {type: array, items: {type: string}}
+        paper_id: {type: [string, "null"]}
+        presentation_ids: {type: array, items: {type: string}}
+        presentation_id: {type: [string, "null"]}
+        skill_ids: {type: array, items: {type: string}}
+        repository: {type: string}
+        presentation: {type: string}
+        evidence: {type: array, items: {type: string}}
+        cv_bullets: {type: array, items: {type: string}}
+        cv_bullets_en: {type: array, items: {type: string}}
+        cv_bullets_zh: {type: array, items: {type: string}}
+        cv_eligible: {type: boolean}
+        record_state: {enum: [draft, ready]}
+        priority: {type: integer, minimum: 1, maximum: 5}
+        tags: {type: array, items: {type: string}}
+        include_for: {type: object, additionalProperties: {type: boolean}}
+        archived: {type: boolean}
+        notes: {type: string}
+      additionalProperties: true
+additionalProperties: false

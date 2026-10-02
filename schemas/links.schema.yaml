@@ -1,0 +1,23 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+title: Link Records
+type: object
+required: [version, records]
+properties:
+  version: {const: 1}
+  records:
+    type: array
+    items:
+      type: object
+      required: [id, label, url, cv_eligible, priority, tags]
+      properties:
+        id: {type: string, pattern: '^link_[0-9]{3,}$'}
+        label: {type: string, minLength: 1}
+        url: {type: string, minLength: 1}
+        cv_eligible: {type: boolean}
+        record_state: {enum: [draft, ready]}
+        priority: {type: integer, minimum: 1, maximum: 5}
+        tags: {type: array, items: {type: string}}
+        include_for: {type: object, additionalProperties: {type: boolean}}
+        archived: {type: boolean}
+      additionalProperties: true
+additionalProperties: false

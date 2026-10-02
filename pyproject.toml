@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "academic-profile"
+version = "0.1.0"
+description = "Single-source academic record and profile-aware CV generator"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "Flask>=3.1,<4",
+  "Jinja2>=3.1,<4",
+  "jsonschema>=4.23,<5",
+  "reportlab>=4.2,<5",
+  "python-docx>=1.1,<2",
+  "PyYAML>=6.0,<7",
+  "waitress>=3.0,<4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3,<9"]
+build = ["pyinstaller>=6.11,<7"]
+
+[project.scripts]
+academic-profile = "academic_profile.cli:main"
+academic-profile-desktop = "academic_profile.desktop:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/academic_profile"]
+
+[tool.pytest.ini_options]
+addopts = "-q --basetemp=.pytest-tmp"
+testpaths = ["tests"]

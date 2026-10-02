@@ -1,0 +1,69 @@
+\documentclass[10pt,letterpaper]{article}
+
+\usepackage[letterpaper,margin=0.68in]{geometry}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{lmodern}
+\else
+  \usepackage{fontspec}
+  \setmainfont{TeX Gyre Heros}
+\fi
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{titlesec}
+\usepackage{tabularx}
+\usepackage{xurl}
+
+\hypersetup{colorlinks=false,pdfborder={0 0 0},pdftitle={((= name|latex =)) Academic CV}}
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+\setlist[itemize]{leftmargin=1.25em,itemsep=1pt,topsep=2pt,parsep=0pt,partopsep=0pt}
+\titleformat{\section}{\large\bfseries}{}{0pt}{}
+\titlespacing*{\section}{0pt}{8pt}{3pt}
+\urlstyle{same}
+\raggedbottom
+
+\newcommand{\cventry}[4]{%
+  \begin{tabularx}{\textwidth}{@{}Xr@{}}
+    \textbf{#1} & #2 \\
+  \end{tabularx}
+  \if\relax\detokenize{#3}\relax\else{\textit{#3}\par}\fi
+  \if\relax\detokenize{#4}\relax\else{#4\par}\fi
+}
+
+\begin{document}
+
+\begin{center}
+  {\LARGE\bfseries ((= name|latex =))}\par
+((* if headline *))
+  \vspace{2pt}{((= headline|latex =))}\par
+((* endif *))
+((* if contact *))
+  \vspace{2pt}\small
+  ((* for item in contact *))((= item.value|latex =))((* if not loop.last *)) \textbar{} ((* endif *))((* endfor *))
+((* endif *))
+\end{center}
+
+((* for section in sections *))
+\section*{((= section.title|latex =))}
+((* if section.id == "research_interests" *))
+((= section['items']|join(', ')|latex =))
+((* else *))
+((* for item in section['items'] *))
+\cventry{((= item.title|latex =))}{((= item.date|latex =))}{((= item.subtitle|latex =))}{((* if item.metadata *))((= item.metadata|join(' | ')|latex =))((* endif *))}
+((* if item.bullets *))
+\begin{itemize}
+((* for bullet in item.bullets *))
+  \item ((= bullet|latex =))
+((* endfor *))
+\end{itemize}
+((* endif *))
+((* endfor *))
+((* endif *))
+((* endfor *))
+
+\end{document}
+

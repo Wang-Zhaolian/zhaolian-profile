@@ -1,0 +1,33 @@
+version: 1
+profile: internship
+display_name: Internship Application
+language: en
+selection:
+  max_priority: 3
+  exclude_tags: [internal_only, theory_only]
+sections:
+  - id: education
+    title: Education
+    max_items: 2
+    max_priority: 4
+  - id: projects
+    title: Selected Projects
+    max_items: 6
+  - id: skills
+    title: Technical Skills
+    max_items: 12
+    max_priority: 4
+  - id: research
+    title: Research Experience
+    max_items: 4
+  - id: publications
+    title: Publications
+    max_items: 3
+  - id: awards
+    title: Awards
+    max_items: 4
+  - id: coursework
+    title: Selected Coursework
+    max_items: 4
+    max_priority: 2
+

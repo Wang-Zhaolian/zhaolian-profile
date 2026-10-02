@@ -1,0 +1,38 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+title: Project Records
+type: object
+required: [version, records]
+properties:
+  version: {const: 1}
+  records:
+    type: array
+    items:
+      type: object
+      required: [id, name, type, start_date, status, cv_eligible, priority, tags]
+      properties:
+        id: {type: string, pattern: '^project_[0-9]{3,}$'}
+        name: {type: string, minLength: 1}
+        name_en: {type: string, minLength: 1}
+        name_zh: {type: string, minLength: 1}
+        type: {type: string, minLength: 1}
+        start_date: {type: string}
+        end_date: {type: string}
+        status: {enum: [planned, active, completed, archived]}
+        description: {type: string}
+        my_contribution: {type: [string, array]}
+        raw_details: {type: [string, array]}
+        cv_bullets: {type: array, items: {type: string}}
+        tech_stack: {type: array, items: {type: string}}
+        repository: {type: string}
+        demo: {type: string}
+        results: {type: array, items: {type: string}}
+        skill_ids: {type: array, items: {type: string}}
+        competition_ids: {type: array, items: {type: string}}
+        cv_eligible: {type: boolean}
+        record_state: {enum: [draft, ready]}
+        priority: {type: integer, minimum: 1, maximum: 5}
+        tags: {type: array, items: {type: string}}
+        include_for: {type: object, additionalProperties: {type: boolean}}
+        archived: {type: boolean}
+      additionalProperties: true
+additionalProperties: false

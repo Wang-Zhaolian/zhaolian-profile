@@ -1,0 +1,15 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+title: Academic Profile Basics
+type: object
+required: [version, name_en, research_interests]
+properties:
+  version: {const: 1}
+  name_en: {type: string}
+  name_zh: {type: string}
+  headline_en: {type: string}
+  headline_zh: {type: string}
+  research_interests:
+    type: array
+    items: {type: string, minLength: 1}
+additionalProperties: false
+

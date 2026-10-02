@@ -1,0 +1,29 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+title: Presentation Records
+type: object
+required: [version, records]
+properties:
+  version: {const: 1}
+  records:
+    type: array
+    items:
+      type: object
+      required: [id, title, event, date, cv_eligible, priority, tags]
+      properties:
+        id: {type: string, pattern: '^presentation_[0-9]{3,}$'}
+        title: {type: string, minLength: 1}
+        event: {type: string, minLength: 1}
+        date: {type: string}
+        location: {type: string}
+        research_id: {type: [string, "null"]}
+        url: {type: string}
+        evidence: {type: array, items: {type: string}}
+        cv_bullets: {type: array, items: {type: string}}
+        cv_eligible: {type: boolean}
+        record_state: {enum: [draft, ready]}
+        priority: {type: integer, minimum: 1, maximum: 5}
+        tags: {type: array, items: {type: string}}
+        include_for: {type: object, additionalProperties: {type: boolean}}
+        archived: {type: boolean}
+      additionalProperties: true
+additionalProperties: false
