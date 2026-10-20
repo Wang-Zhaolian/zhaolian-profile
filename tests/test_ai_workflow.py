@@ -7,11 +7,14 @@ import pytest
 import yaml
 
 from academic_profile.ai_workflow import (
+    add_proposal_batch,
     build_context,
     get_note,
     list_notes,
     parse_proposals,
     save_note,
+    set_note_completed,
+    update_candidate,
 )
 from academic_profile.constants import DATA_CATEGORIES
 
@@ -75,7 +78,7 @@ def test_context_includes_all_structured_records_but_no_private_sources(tmp_path
     assert {item["record_state"] for item in context["records"]} == {"ready", "draft"}
     serialized = json.dumps(context, ensure_ascii=False)
     assert "Detailed method notes" in serialized
-    assert context["profile"] == {"name_en": "Synthetic Scholar", "research_interests": ["Graph theory"]}
+    assert context["profile"] == {"research_interests": ["Graph theory"]}
     assert "Old note secret phrase" not in serialized
     assert "hidden-contact@example.org" not in serialized
     assert "private@example.org" not in serialized
@@ -97,7 +100,7 @@ def test_long_context_uses_all_record_synopsis_and_only_fitting_full_records(tmp
     assert context["record_count"] == 3
     assert len(context["synopsis"]) == 3
     assert context["full_record_count"] < 3
-    assert context["profile"]["name_en"] == "Synthetic Scholar"
+    assert context["profile"] == {"research_interests": ["Graph theory"]}
     assert all(item["record_state"] == "draft" for item in context["synopsis"])
 
 
@@ -135,6 +138,7 @@ def test_proposals_allowlist_and_local_duplicate_hints(tmp_path: Path) -> None:
     assert "private@example.org" not in award["fields"]["description"]
     assert not ({"evidence", "id", "record_state", "fabricated_key"} & award["fields"].keys())
     assert award["possible_duplicates"][0]["id"] == "award_001"
+    assert len(award["possible_duplicates"][0]["revision"]) == 64
     assert award["source_excerpt"] == "Excellence Award from University"
     assert "status" not in proposals[1]["fields"]
     assert proposals[1]["source_excerpt"] == ""
@@ -142,3 +146,26 @@ def test_proposals_allowlist_and_local_duplicate_hints(tmp_path: Path) -> None:
     assert proposals[2]["fields"]["raw_details"] == "Observed initial pattern"
     with pytest.raises(ValueError, match="有效 JSON"):
         parse_proposals(home, "not JSON", note)
+
+
+def test_proposal_batch_progress_and_note_history_persist(tmp_path: Path) -> None:
+    home = _empty_home(tmp_path / "home")
+    note = save_note(home, "Participated in a research project.")
+    candidates = parse_proposals(home, json.dumps({"candidates": [{
+        "category": "research", "fields": {"title": "Research project"},
+        "source_excerpt": "Participated in a research project.",
+    }]}), note["text"])
+    batch = add_proposal_batch(home, note["id"], candidates, [])
+    operation = batch["candidates"][0]["operation_id"]
+
+    updated = update_candidate(home, note["id"], batch["id"], operation, "pending", {"title": "Edited title"})
+    assert updated["pending_candidates"] == 1
+    persisted = get_note(home, note["id"], include_storage=True)
+    assert persisted["batches"][0]["candidates"][0]["fields"]["title"] == "Edited title"
+
+    update_candidate(home, note["id"], batch["id"], operation, "adopted", {"title": "Edited title"})
+    assert list_notes(home) == []
+    assert get_note(home, note["id"], include_storage=True)["batches"][0]["candidates"][0]["status"] == "adopted"
+    set_note_completed(home, note["id"], True)
+    assert list_notes(home) == []
+    assert get_note(home, note["id"], include_storage=True)["completed"] is True

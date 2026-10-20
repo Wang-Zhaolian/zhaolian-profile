@@ -1,0 +1,17 @@
+version: 1
+records:
+  - id: paper_001
+    title: Evaluation Choices in Compact Image Classification
+    title_zh: 小型图像分类中的评估选择
+    authors: [Sample Student, A. Researcher]
+    my_author_position: 1
+    venue: Fictional Workshop on Reliable Learning
+    year: 2026
+    status: manuscript
+    url: https://example.com/fictional-paper
+    research_id: research_001
+    citation: Sample Student and A. Researcher. Evaluation Choices in Compact Image Classification. Manuscript, 2026.
+    notes: Synthetic manuscript used only for generator tests.
+    cv_eligible: true
+    priority: 1
+    tags: [machine_learning, reliability]

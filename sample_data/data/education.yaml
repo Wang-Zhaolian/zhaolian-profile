@@ -1,0 +1,22 @@
+version: 1
+records:
+  - id: education_001
+    institution: Sample University
+    institution_zh: 示例大学
+    school: School of Computing
+    degree: Bachelor of Science
+    degree_zh: 理学学士
+    major: Computer Science
+    major_zh: 计算机科学
+    start_date: 2023-09
+    expected_graduation: 2027-06
+    gpa: 3.82
+    gpa_scale: 4.0
+    rank: 8
+    rank_total: 160
+    honors:
+      - Dean's List, 2024
+    location: Sample City
+    cv_eligible: true
+    priority: 1
+    tags: [core]

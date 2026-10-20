@@ -16,30 +16,38 @@ from pathlib import Path
 
 from . import __version__
 from .webapp import create_app
+from .library import default_home, file_lock, initialize_home, library_id
+from .resources import resource_root
 
 PORT = 52847
 
 
 def _default_home() -> Path:
-    if getattr(sys, "frozen", False):
-        candidate = Path(sys.executable).resolve().parents[2]
-    else:
-        candidate = Path(__file__).resolve().parents[2]
-    for path in (candidate, *candidate.parents):
-        if (path / "data").is_dir() and (path / "profiles").is_dir():
-            return path
-    return candidate
+    return default_home()
 
 
-def _health(port: int) -> bool:
+def _server_info(port: int) -> dict:
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=0.8) as response:
             if response.status != 200:
-                return False
+                return {}
             payload = json.loads(response.read().decode("utf-8"))
-            return payload.get("name") == "academic-profile" and payload.get("version") == __version__
-    except (OSError, urllib.error.URLError):
-        return False
+            return payload if isinstance(payload, dict) and payload.get("name") == "academic-profile" else {}
+    except (OSError, urllib.error.URLError, ValueError, UnicodeError):
+        return {}
+
+
+def _health(port: int, home: Path) -> bool:
+    payload = _server_info(port)
+    return payload.get("version") == __version__ and payload.get("library_id") == library_id(home)
+
+
+def _message(message: str) -> None:
+    if os.name == "nt":
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(None, message, "昭濂个人履历库", 0x10)
+    else:
+        print(message, file=sys.stderr)
 
 
 def _runtime_root(home: Path) -> Path:
@@ -61,15 +69,15 @@ def _unused_local_port() -> int:
         return int(listener.getsockname()[1])
 
 
-def _serve(home: Path, port: int) -> int:
+def _serve_locked(home: Path, port: int) -> int:
     from waitress import serve
 
     marker = home / "private" / "desktop-server.local.json"
     marker.parent.mkdir(parents=True, exist_ok=True)
     temp = marker.with_suffix(".tmp")
-    temp.write_text(json.dumps({"port": port, "pid": os.getpid()}), encoding="utf-8")
+    temp.write_text(json.dumps({"port": port, "pid": os.getpid(), "version": __version__, "library_id": library_id(home)}), encoding="utf-8")
     os.replace(temp, marker)
-    frozen_root = Path(getattr(sys, "_MEIPASS", _default_home()))
+    frozen_root = resource_root()
     try:
         app = create_app(home, static_root=frozen_root, callback_port=port)
         serve(app, host="127.0.0.1", port=port, threads=6, ident="AcademicProfile")
@@ -83,18 +91,29 @@ def _serve(home: Path, port: int) -> int:
     return 0
 
 
+def _serve(home: Path, port: int) -> int:
+    with file_lock(home / ".runtime" / "server.lock"):
+        initialize_home(home)
+        return _serve_locked(home, port)
+
+
 def _desktop(home: Path) -> int:
+    initialize_home(home)
     marker = home / "private" / "desktop-server.local.json"
     if marker.exists():
         try:
             port = int(json.loads(marker.read_text(encoding="utf-8"))["port"])
         except (OSError, ValueError, KeyError, TypeError):
             port = PORT
-        if _health(port):
+        if _health(port, home):
             webbrowser.open(f"http://127.0.0.1:{port}/", new=1)
             return 0
+        info = _server_info(port)
+        if info and info.get("version") != __version__:
+            _message("这份资料库的旧版程序仍在运行。请先保存旧窗口中的输入，并通过旧版界面的退出按钮关闭程序，然后重新打开新版。")
+            return 1
 
-    if _health(PORT):
+    if _health(PORT, home):
         webbrowser.open(f"http://127.0.0.1:{PORT}/", new=1)
         return 0
 
@@ -121,33 +140,30 @@ def _desktop(home: Path) -> int:
         )
 
     for _ in range(80):
-        if _health(port):
+        if _health(port, home):
             webbrowser.open(f"http://127.0.0.1:{port}/", new=1)
             return 0
         time.sleep(0.25)
-    try:
-        import ctypes
-        ctypes.windll.user32.MessageBoxW(
-            None,
-            f"平台启动失败。详细信息保存在：\n{log_path}",
-            "昭濂学术档案",
-            0x10,
-        )
-    except Exception:
-        pass
+    _message(f"平台启动失败。详细信息保存在：\n{log_path}")
     return 1
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="昭濂学术档案")
+    parser = argparse.ArgumentParser(prog="昭濂个人履历库")
     parser.add_argument("--serve", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--home", type=Path, default=_default_home(), help=argparse.SUPPRESS)
     parser.add_argument("--port", type=int, default=PORT, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     home = args.home.resolve()
-    if args.serve:
-        return _serve(home, args.port)
-    return _desktop(home)
+    try:
+        if args.serve:
+            return _serve(home, args.port)
+        return _desktop(home)
+    except Exception as exc:
+        if args.serve:
+            raise
+        _message(f"无法打开资料库：{exc}")
+        return 1
 
 
 if __name__ == "__main__":

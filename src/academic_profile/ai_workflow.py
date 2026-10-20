@@ -1,6 +1,6 @@
 """Private AI source notes and reviewable, fact-grounded record proposals.
 
-This module deliberately does not use the CV document context: that context
+This module deliberately does not use a document-export context: that context
 contains private contact information and omits drafts. The only note admitted
 to an AI request is the new note passed explicitly to ``build_context``.
 """
@@ -8,21 +8,22 @@ to an AI request is the new note passed explicitly to ``build_context``.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import shutil
 import tempfile
+import threading
 import uuid
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
-from .constants import DATA_CATEGORIES
 from .dates import validate_date_string
 from .file_inputs import save_attachments
 from .loader import load_master_data
-from .ui_fields import CATEGORIES, FIELD_DEFINITIONS
+from .categories import category_map, field_definitions
 
 
 MAX_NOTE_CHARS = 20_000
@@ -34,10 +35,16 @@ _PHONE = re.compile(r"(?<!\d)(?:\+?86[-\s]?)?1[3-9]\d[-\s]?\d{4}[-\s]?\d{4}(?!\d
 _WINDOWS_PATH = re.compile(r"(?<![\w])(?:[A-Za-z]:[\\/]|\\\\)[^\s\"'<>，；,;]+")
 _UNIX_PATH = re.compile(r"(?<![\w:])/(?:Users|home|mnt|Volumes|tmp|var|etc)/[^\s\"'<>，；,;]+")
 _FILE_URI = re.compile(r"file://[^\s\"'<>，；,;]+", re.IGNORECASE)
-_TITLE_FIELDS = {item["id"]: item["title_field"] for item in CATEGORIES}
 _RELATION_PREFIXES = ("relation:", "relation_one:")
 _EXCLUDED_FIELDS = {"evidence"}
 _REDACTION = "[已隐藏私人信息]"
+_NOTE_LOCKS: dict[str, threading.RLock] = {}
+_NOTE_LOCKS_GUARD = threading.Lock()
+
+
+def _note_lock(note_id: str) -> threading.RLock:
+    with _NOTE_LOCKS_GUARD:
+        return _NOTE_LOCKS.setdefault(note_id, threading.RLock())
 
 
 def _note_directory(home: Path) -> Path:
@@ -80,6 +87,18 @@ def _note_metadata(note: dict[str, Any]) -> dict[str, Any]:
         "preview": note_text.replace("\n", " ").strip()[:120] or (f"包含 {len(attachments)} 个附件" if attachments else "空素材"),
         "length": len(note_text),
         "attachments": attachments,
+        "completed": bool(note.get("completed", False)),
+        "pending_candidates": sum(
+            candidate.get("status", "pending") == "pending"
+            for batch in note.get("batches", []) if isinstance(batch, dict)
+            for candidate in batch.get("candidates", []) if isinstance(candidate, dict)
+        ),
+        "batches": [
+            {"id": batch.get("id"), "created_at": batch.get("created_at"),
+             "candidate_count": len(batch.get("candidates", [])),
+             "pending_candidates": sum(item.get("status", "pending") == "pending" for item in batch.get("candidates", []))}
+            for batch in note.get("batches", []) if isinstance(batch, dict)
+        ],
     }
 
 
@@ -97,6 +116,8 @@ def save_note(home: Path, text: str, uploads: list[tuple[str, bytes]] | None = N
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "text": text,
         "attachments": attachments,
+        "completed": False,
+        "batches": [],
     }
     try:
         _atomic_json(_note_path(home, note["id"]), note)
@@ -136,8 +157,81 @@ def list_notes(home: Path) -> list[dict[str, Any]]:
             note = get_note(home, path.stem)
         except (OSError, ValueError, KeyError):
             continue
-        notes.append({key: note[key] for key in ("id", "created_at", "preview", "length", "attachments")})
+        if note["completed"]:
+            continue
+        # Read old completed batches consistently as well, without rewriting
+        # the user's historical notes just to render a list.
+        stored = get_note(home, path.stem, include_storage=True)
+        if _fully_processed(stored):
+            continue
+        notes.append({key: note[key] for key in ("id", "created_at", "preview", "length", "attachments", "completed", "pending_candidates", "batches")})
     return sorted(notes, key=lambda item: (item["created_at"], item["id"]), reverse=True)
+
+
+def add_proposal_batch(
+    home: Path, note_id: str, candidates: list[dict[str, Any]], attachment_ids: list[str]
+) -> dict[str, Any]:
+    with _note_lock(note_id):
+        note = get_note(home, note_id, include_storage=True)
+        batch = {
+            "id": uuid.uuid4().hex,
+            "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "attachment_ids": list(attachment_ids),
+            "candidates": [
+                {**item, "status": "pending", "operation_id": uuid.uuid4().hex}
+                for item in candidates
+            ],
+        }
+        note.setdefault("batches", []).append(batch)
+        note["completed"] = False
+        _atomic_json(_note_path(home, note_id), note)
+        return batch
+
+
+def _fully_processed(note: dict[str, Any]) -> bool:
+    batches = note.get("batches", [])
+    candidates = [candidate for batch in batches for candidate in batch.get("candidates", [])]
+    covered = {item for batch in batches if batch.get("candidates") for item in batch.get("attachment_ids", [])}
+    return bool(candidates) and all(candidate.get("status") in {"adopted", "discarded"} for candidate in candidates) and all(item["id"] in covered for item in note.get("attachments", []))
+
+
+def update_candidate(
+    home: Path, note_id: str, batch_id: str, operation_id: str,
+    status: str, fields: dict[str, Any] | None = None, category: str | None = None,
+) -> dict[str, Any]:
+    if status not in {"pending", "adopted", "discarded"}:
+        raise ValueError("候选处理状态不正确。")
+    with _note_lock(note_id):
+        note = get_note(home, note_id, include_storage=True)
+        for batch in note.get("batches", []):
+            if batch.get("id") != batch_id:
+                continue
+            for candidate in batch.get("candidates", []):
+                if candidate.get("operation_id") != operation_id:
+                    continue
+                if candidate.get("status") == "pending":
+                    if category is not None:
+                        if category not in category_map(home):
+                            raise ValueError("请选择当前可用的分类。")
+                        candidate["category"] = category
+                    candidate["status"] = status
+                    if fields is not None:
+                        candidate["fields"] = fields
+                    candidate["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                    if _fully_processed(note):
+                        note["completed"] = True
+                    _atomic_json(_note_path(home, note_id), note)
+                return _note_metadata(note)
+        raise ValueError("没有找到这条待处理的 AI 候选。")
+
+
+def set_note_completed(home: Path, note_id: str, completed: bool) -> dict[str, Any]:
+    with _note_lock(note_id):
+        note = get_note(home, note_id, include_storage=True)
+        note["completed"] = bool(completed)
+        note["completed_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds") if completed else None
+        _atomic_json(_note_path(home, note_id), note)
+        return _note_metadata(note)
 
 
 def _scrub_text(text: str) -> str:
@@ -147,11 +241,17 @@ def _scrub_text(text: str) -> str:
     return result
 
 
-def _allowed_fields(category: str) -> dict[str, str]:
+def _allowed_fields(home: Path, category: str) -> dict[str, str]:
     """Derive fields from the live UI definition; never trust model field names."""
     allowed: dict[str, str] = {}
-    for field in FIELD_DEFINITIONS.get(category, []):
-        key, _label, kind, _advanced = field
+    for field in field_definitions(home, category):
+        key, kind = field["key"], field["type"]
+        if key.endswith("_en") or "英文" in field.get("label", ""):
+            continue
+        if kind == "select":
+            kind = "select:" + ",".join(field.get("options", []))
+        elif kind == "multiselect":
+            kind = "multiselect:" + ",".join(field.get("options", []))
         if key in _EXCLUDED_FIELDS or kind.startswith(_RELATION_PREFIXES):
             continue
         # Linked profile URLs may be personal contact channels, unlike an
@@ -178,8 +278,8 @@ def _safe_value(value: Any) -> Any:
     return None
 
 
-def _safe_record(category: str, record: dict[str, Any]) -> dict[str, Any]:
-    allowed = _allowed_fields(category)
+def _safe_record(home: Path, category: str, record: dict[str, Any]) -> dict[str, Any]:
+    allowed = _allowed_fields(home, category)
     fields = {
         key: value
         for key in allowed
@@ -188,6 +288,7 @@ def _safe_record(category: str, record: dict[str, Any]) -> dict[str, Any]:
     return {
         "category": category,
         "id": str(record.get("id", "")),
+        "title_field": category_map(home, include_archived=True)[category].get("title_field", "title"),
         "record_state": record.get("record_state", "ready"),
         "archived": bool(record.get("archived", False)),
         "fields": fields,
@@ -196,17 +297,18 @@ def _safe_record(category: str, record: dict[str, Any]) -> dict[str, Any]:
 
 def _all_records(home: Path, data: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     data = data if data is not None else load_master_data(Path(home) / "data")
+    categories = category_map(home)
     return [
-        _safe_record(category, record)
-        for category in DATA_CATEGORIES
-        for record in data[category]
+        _safe_record(home, category, record)
+        for category in categories
+        for record in data.get(category, [])
         if isinstance(record, dict)
     ]
 
 
 def _safe_profile(basics: dict[str, Any]) -> dict[str, Any]:
     """Only academic basics belong in AI context; contacts live elsewhere."""
-    fields = ("name_en", "name_zh", "headline_en", "headline_zh", "research_interests", "research_interests_en")
+    fields = ("name_zh", "headline_zh", "research_interests")
     return {
         key: value
         for key in fields
@@ -216,14 +318,15 @@ def _safe_profile(basics: dict[str, Any]) -> dict[str, Any]:
 
 def _synopsis(record: dict[str, Any]) -> dict[str, Any]:
     fields = record["fields"]
-    title_field = _TITLE_FIELDS[record["category"]]
+    category = record["category"]
+    title_field = record.get("title_field", "title")
     title = next(
         (fields[key] for key in (f"{title_field}_en", title_field, f"{title_field}_zh") if fields.get(key)),
         "未命名记录",
     )
     date = next((fields[key] for key in ("date", "start_date", "year", "semester") if fields.get(key)), "")
     return {
-        "category": record["category"],
+        "category": category,
         "id": record["id"],
         "record_state": record["record_state"],
         "title": str(title)[:120],
@@ -304,6 +407,11 @@ def _candidate_value(value: Any, kind: str) -> Any:
         if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
             return None
         return [cleaned for item in value if (cleaned := _scrub_text(item).strip())]
+    if kind.startswith("multiselect:"):
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            return None
+        allowed = {item.strip() for item in kind.split(":", 1)[1].split(",") if item.strip()}
+        return [item.strip() for item in value if item.strip() in allowed]
     if kind == "map":
         if not isinstance(value, dict):
             return None
@@ -326,8 +434,11 @@ def _candidate_value(value: Any, kind: str) -> Any:
     return cleaned
 
 
-def _duplicate_hints(category: str, fields: dict[str, Any], existing: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    title_field = _TITLE_FIELDS[category]
+def _duplicate_hints(
+    home: Path, category: str, fields: dict[str, Any], existing: list[dict[str, Any]],
+    revision: str,
+) -> list[dict[str, Any]]:
+    title_field = category_map(home, include_archived=True)[category].get("title_field", "title")
     proposed_title = next(
         (fields.get(key) for key in (f"{title_field}_en", title_field, f"{title_field}_zh") if fields.get(key)),
         None,
@@ -357,7 +468,10 @@ def _duplicate_hints(category: str, fields: dict[str, Any], existing: list[dict[
             continue
         score = SequenceMatcher(None, proposed, current).ratio()
         if score >= 0.72:
-            hints.append({"id": record["id"], "category": category, "title": title, "score": round(score, 2)})
+            hints.append({
+                "id": record["id"], "category": category, "title": title,
+                "score": round(score, 2), "revision": revision,
+            })
     return sorted(hints, key=lambda item: item["score"], reverse=True)[:5]
 
 
@@ -386,7 +500,21 @@ def parse_proposals(
     candidates = parsed.get("candidates") if isinstance(parsed, dict) else parsed
     if not isinstance(candidates, list) or len(candidates) > 50:
         raise ValueError("AI 返回的候选记录格式或数量不正确。")
-    existing = _all_records(home)
+    active_categories = list(category_map(home))
+    try:
+        revisions_before = {
+            category_id: hashlib.sha256((Path(home) / "data" / f"{category_id}.yaml").read_bytes()).hexdigest()
+            for category_id in active_categories
+        }
+        existing = _all_records(home)
+        revisions_after = {
+            category_id: hashlib.sha256((Path(home) / "data" / f"{category_id}.yaml").read_bytes()).hexdigest()
+            for category_id in active_categories
+        }
+    except OSError:
+        raise ValueError("履历资料正在变化或有分类文件无法读取，请刷新后重新整理。") from None
+    if revisions_before != revisions_after:
+        raise ValueError("AI 整理期间履历资料被其他窗口修改，请重新整理后审核。")
     output: list[dict[str, Any]] = []
     allowed_attachments = {
         str(item.get("id")): str(item.get("name", "附件"))
@@ -394,13 +522,14 @@ def parse_proposals(
     }
     normalized_note = " ".join(_scrub_text(note_text).split()) if isinstance(note_text, str) else ""
     for raw in candidates:
-        if not isinstance(raw, dict) or raw.get("category") not in DATA_CATEGORIES:
+        available_categories = category_map(home)
+        if not isinstance(raw, dict) or raw.get("category") not in available_categories:
             continue
         category = raw["category"]
         raw_fields = raw.get("fields")
         if not isinstance(raw_fields, dict):
             continue
-        allowed = _allowed_fields(category)
+        allowed = _allowed_fields(home, category)
         fields: dict[str, Any] = {}
         warnings: list[str] = []
         for key, value in raw_fields.items():
@@ -453,7 +582,7 @@ def parse_proposals(
             "fields": fields,
             "source_excerpt": excerpt,
             "source_references": source_references,
-            "possible_duplicates": _duplicate_hints(category, fields, existing),
+            "possible_duplicates": _duplicate_hints(home, category, fields, existing, revisions_after.get(category, "")),
             "warnings": list(dict.fromkeys(warnings)),
         })
     return output

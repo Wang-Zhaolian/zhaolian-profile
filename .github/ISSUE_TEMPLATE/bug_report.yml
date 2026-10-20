@@ -1,0 +1,23 @@
+name: 使用问题
+description: 报告启动、录入、AI 或备份问题
+body:
+  - type: markdown
+    attributes:
+      value: 请勿上传成绩单、联系方式、登录凭据或完整资料目录。截图和日志请先脱敏。
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本与 Windows 版本
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 操作步骤与遇到的问题
+      description: 请说明预期结果和实际结果。
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 脱敏截图或错误提示

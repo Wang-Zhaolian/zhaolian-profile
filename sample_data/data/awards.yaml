@@ -1,0 +1,15 @@
+version: 1
+records:
+  - id: award_001
+    name: Sample Academic Excellence Award
+    level: University
+    organizer: Sample University
+    date: 2025-11
+    result: Recipient
+    team: false
+    role: Individual applicant
+    description: Fictional award for demonstrating the schema.
+    evidence: [evidence/sample-award-certificate.pdf]
+    cv_eligible: true
+    priority: 2
+    tags: [academic]

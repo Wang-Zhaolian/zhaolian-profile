@@ -1,244 +1,66 @@
-# 昭濂学术档案
+<p align="center"><img src="static/branding/zhaolian-app.png" width="88" alt="昭濂个人履历库晶体图标"></p>
 
-`academic-profile` 是运行在个人 Windows 电脑上的学术履历平台。日常通过浏览器界面录入和整理资料；程序把记录保存在可读的 YAML 文件中，并按申请场景生成简历。`data/` 是唯一权威数据源；任何 CV 都不需要再手工维护一份。
+# 昭濂个人履历库
 
-平台只监听本机，不依赖数据库服务器或网络即可录入、保存和导出。需要备份时，手动点击界面中的“备份到 GitHub”；备份前会核验 `Wang-Zhaolian/academic-profile` 是 Private 仓库并确认远程目标匹配。真实分类文件初始为空，界面不会读取或展示演示数据。
+记录学业、科研和成长路径的私人工作台。
 
-## 日常使用
+把散落在笔记、成绩单和文档中的经历，整理为自己能够长期维护的履历库。中文界面，在本机浏览器操作；支持自定义分类、附件草稿和 ChatGPT 辅助整理。日常手工录入无需联网。
 
-- 双击桌面上的 **昭濂学术档案** 快捷方式打开平台。首次制作本机程序包时运行一次 `scripts/build_windows.ps1`；日常使用不需要命令行、Python 或 LaTeX。
-- 在“个人资料”中填写姓名；在左侧固定分类中逐条新增记录。可以先保存为草稿，以后补全后再选择“整理完成”。
-- 只有整理完成且勾选“用于简历”的记录会进入简历预览。可切换博士申请、科研助理、暑期科研、国内升学和实习版本。
-- 预览确认后可下载 PDF、Word 或 LaTeX。PDF 由内置排版生成，不要求安装 LaTeX。
-- 在“快速录入”中粘贴经历笔记，可选择使用 ChatGPT 订阅版拆分和整理多条候选经历。逐项审核后才写入，默认保存为草稿；AI 不会替你补造未知事实。
-- 首次使用 AI 时，点击“使用 ChatGPT 登录”并在浏览器完成授权。仅连接 ChatGPT；连接或额度不可用时会说明原因，不会切换到其他收费服务。AI 请求只会发送本次输入的文字、你主动选择的附件，以及履历中的学术文字；不会发送联系方式、未选附件、本机路径或旧笔记，也不能读取 ChatGPT 对话。符合条件的账号才能使用订阅额度；具体权限由登录及请求结果确认。
-- 素材箱支持文字与 PNG、JPG、WEBP、PDF、DOCX、XLSX、PPTX、TXT 和 Markdown 混合录入。原始笔记和附件仅保存在本机 `private/ai_notes/`；Office 文档会在你发起 AI 整理时尝试通过本机 Office 转为 PDF。超出单次限制时请拆分文件或分批选择，平台不会静默截断。ChatGPT 授权令牌以 Windows 当前用户保护方式保存在 `%LOCALAPPDATA%/AcademicProfile/chatgpt/`。原笔记、附件和令牌都不会进入 GitHub 备份。
-- 平台自动保存到项目目录。联系方式（包括电话号码）放在本机 `private/contact.yaml`；证明材料请在记录中写本地路径或网址。它们不会上传 GitHub。
-- “备份与设置”会清楚显示仓库、待备份状态和上次成功时间。遇到网络、权限或远端冲突时，本机资料仍会保留；冲突不会强制覆盖。
+**[下载 Windows 试用版](https://github.com/Wang-Zhaolian/zhaolian-profile/releases/latest)** · [使用指南](docs/使用指南.md) · [隐私与备份](docs/隐私与备份.md) · [反馈问题](https://github.com/Wang-Zhaolian/zhaolian-profile/issues/new/choose)
 
-## 系统流程
+## 下载后怎样打开
 
-```text
-data/*.yaml
-    -> schema and cross-reference validation
-    -> profile selection and deterministic CV lint
-    -> shared CV content model
-    -> cv.tex, cv.docx, and an embedded-layout cv.pdf
+1. 在下载页面选择 `ZhaolianProfile-0.3.0-windows-x64.zip`，完整解压到一个文件夹。
+2. 双击 `ZhaolianProfile-0.3.0.exe`，等待浏览器自动打开。
+3. 点击一个分类开始记录，或把文字、图片、文档放入草稿箱。
 
-local note + sanitized academic context
-    -> ChatGPT subscription Responses API
-    -> user-reviewed draft candidates
-    -> data/*.yaml
-```
+无需安装 Python。首次启动是一份空白资料库，之后录入的内容保存在 Windows 当前用户的 `%LOCALAPPDATA%\ZhaolianProfile` 中。更新时替换程序文件即可，保留资料目录。退出请使用页面中的退出按钮。
 
-预览、PDF、Word 和 LaTeX 共用同一份筛选结果，因此各格式内容一致。版式允许略有差异。
+目前提供 Windows x64 试用包；其他系统没有经过桌面版验收。安装包暂未进行代码签名，可用发布页的 SHA256 校验值核对文件来源；无需关闭系统安全防护。
 
-## 目录职责
+## 可以做什么
 
-```text
-academic-profile/
-├── data/                 真实 Master Academic Record，初始为空
-├── private/              本地联系方式、AI 授权与原笔记；均被 Git 忽略
-├── evidence/             成绩单、证书、未发表材料等；内容默认被 Git 忽略
-├── profiles/             五种申请场景的章节顺序与筛选规则
-├── schemas/              每类 YAML 的 JSON Schema 2020-12 约束
-├── sample_data/          旧版隔离演示资料；平台不会读取或展示
-├── templates/latex/      ATS-friendly 单栏 LaTeX 模板
-├── templates/docx/       Word 样式模板
-├── src/academic_profile/ 加载、验证、筛选、lint 与生成代码
-├── scripts/              模板构建等维护脚本
-├── tests/                自动测试
-├── output/               生成结果；被 Git 忽略
-├── ADD_RECORD.md         以后添加和维护经历的操作手册
-├── generate.py           不安装命令行入口时的兼容脚本
-└── pyproject.toml        Python 依赖与命令行配置
-```
+- **按自己的方式分类**：初始提供教育、科研、论文、课程等十二类，可自行增加、改名、排序、归档，并编辑每类的字段。
+- **先记下，再整理**：草稿箱支持文字和多个附件混合保存；AI 提出的候选由你修改、删除和统一审核，采纳后的记录进入对应分类。
+- **资料更容易找**：按卡片标题检索；数字与日期支持升降序；卡片和列表统一展示表单前五项。
+- **AI 由你控制**：使用自己的 ChatGPT 账号授权，记住上次模型选择；不会自动切换到其他服务商或付费 API。
+- **本机优先**：联系方式、原笔记、附件和凭据保留本机；可手动将履历文字备份到自己的私有 GitHub 仓库。
 
-各数据文件的具体用途：
+平台当前专注于经历记录与整理，不提供简历生成或 PDF／Word／LaTeX 简历导出。
 
-- `basics.yaml`：公开姓名、标题和研究兴趣。私人联系方式不放这里。
-- `education.yaml`：学校、学位、专业、GPA、排名与荣誉。
-- `research.yaml`：科研问题、个人贡献、方法、结果和科研产出关系。
-- `publications.yaml`：论文作者、状态、年份、DOI 与关联科研。
-- `projects.yaml`：独立于 Research 的软件、复现和工程项目。
-- `awards.yaml` 与 `competitions.yaml`：奖项和竞赛结果。
-- `coursework.yaml`：完整课程档案；Profile 只选择高阶且相关的课程。
-- `skills.yaml`：按 Programming、ML、Data、Optimization、Research Tools、Development Tools、Languages 分类的技能与证据。
-- `presentations.yaml`、`english.yaml`、`activities.yaml`、`links.yaml`：汇报、英语成绩、长期活动和公开链接。
+## 界面预览
 
-## 源码维护（非日常操作）
+以下截图仅包含虚构示例资料，下载版不会预装这些经历。
 
-需要 Python 3.11 或更新版本。推荐使用 `uv` 创建隔离环境：
+![履历分类总览](docs/images/overview.png)
+![课程记录与检索排序](docs/images/records.png)
+
+## AI 与附件说明
+
+AI 是可选功能，使用者需要自行登录授权。账号资格、地区、权限、可用模型及额度以实际授权和请求结果为准，不保证所有 ChatGPT 订阅账号均可使用。授权不会授予读取既有 ChatGPT 对话的权限。未连接 AI 时仍可手工维护资料。
+
+支持 PNG、JPG、WEBP、PDF、DOCX、TXT、Markdown、XLSX、PPTX。只有主动发起 AI 整理时，选中的内容才会发送用于识读。Office 文档转 PDF 使用本机 Microsoft Word、Excel 或 PowerPoint；没有对应软件或转换失败时，可自行转成 PDF 上传。
+
+## 源码运行
+
+需要 Python 3.11 或更新版本及 [uv](https://docs.astral.sh/uv/)。在克隆后的项目目录运行：
 
 ```powershell
-cd academic-profile
-uv sync --extra dev
+uv sync --frozen --extra dev
+uv run academic-profile-desktop
 ```
 
-不使用 `uv` 时也可以创建普通虚拟环境，然后执行 `pip install -e ".[dev]"`。
-
-首次填写联系方式时复制示例文件：
+开发运行也默认使用本机应用数据目录。测试或开发时请显式选择独立资料目录：
 
 ```powershell
-Copy-Item private/contact.example.yaml private/contact.yaml
-```
-
-`private/contact.yaml` 已在 `.gitignore` 中。默认只建议填写姓名、邮箱、GitHub、个人网站和所在城市；不要保存身份证号、家庭地址或不必要的电话号码。
-
-## 先运行虚构样例
-
-以下命令验证并生成五种示例 CV，便于确认本机环境：
-
-```powershell
-uv run academic-profile validate --data-dir sample_data/data
-uv run academic-profile lint --data-dir sample_data/data
-uv run academic-profile generate all `
-  --data-dir sample_data/data `
-  --contact sample_data/private/contact.yaml `
-  --output-root output/sample
-```
-
-输出位于 `output/sample/<profile>/cv.tex` 和 `cv.docx`。如果检测到 LaTeX 引擎，同目录还会有 `cv.pdf`。
-
-## 填写真实数据
-
-从 `data/basics.yaml` 和 `data/education.yaml` 开始，再依次录入 Research、Publication、Project、Coursework 和 Award。不要把 `sample_data/` 直接复制成真实数据；逐条参考其结构并替换为你核实过的事实。
-
-所有主要记录使用不会随标题变化的 ID，例如 `research_001`、`paper_001`、`project_001` 和 `course_001`。跨文件关系只引用 ID：
-
-```yaml
-# data/publications.yaml
-- id: paper_001
-  research_id: research_001
-```
-
-日期只能使用 `YYYY-MM` 或 `YYYY-MM-DD`。平台默认生成中文简历，也可以切换英文；缺少所选语言字段时会显示已有语言内容并在预览中提示，不自动翻译。中文姓名即可生成中文简历；需要英文申请时可补充英文姓名和经历译文。
-
-详细字段、最小记录示例、归档方法和交互式添加见 [ADD_RECORD.md](ADD_RECORD.md)。
-
-## 验证与 CV lint
-
-```powershell
-uv run academic-profile validate
-uv run academic-profile lint
-```
-
-`validate` 检查 YAML Schema、必需字段、重复 ID、日期格式和顺序、空或非法 URL、不存在的跨表引用、论文状态与 Profile 定义。论文状态只允许：
-
-```text
-published accepted under_review submitted preprint manuscript
-```
-
-`lint` 不使用 AI。它检查可能重复的经历、明显拼写问题、重复空格、过长 bullet、缺少 Institution，以及 Research 中缺少个人贡献等规则。
-
-## Profile 选择规则
-
-五个预置 Profile 位于 `profiles/`：
-
-- `phd`：Education、Research Interests、Research、Publications、Projects、Coursework、Awards、Presentations、Skills。
-- `ra`：Research、复现项目、方法、编程、实验和论文。
-- `summer_research`：Education、Coursework、Research、Projects、Skills 与 Awards。
-- `domestic`：允许更多 GPA、排名、课程、奖项和竞赛内容。
-- `internship`：优先 Projects、Skills、Programming 和应用型 Research，减少理论课程。
-
-默认选择必须同时满足：`cv_eligible: true`、没有归档、`priority` 达到 Profile 阈值、标签未被排除。`priority: 1` 最高，`5` 最低。局部覆盖只写需要改变的场景：
-
-```yaml
-include_for:
-  phd: true
-  internship: false
-```
-
-`include_for: true` 可以越过优先级和标签规则，但不能让已归档记录重新出现。Generator 不会为了填满页面自动加入弱经历，也不会自动粗暴缩写 `raw_details`；CV 只使用你审核过的 `cv_bullets`。
-
-## 生成不同 CV
-
-```powershell
-uv run academic-profile generate phd
-uv run academic-profile generate ra
-uv run academic-profile generate summer_research
-uv run academic-profile generate domestic
-uv run academic-profile generate internship
-uv run academic-profile generate all
-```
-
-也支持兼容命令：
-
-```powershell
-python generate.py --profile phd
-python generate.py validate
-```
-
-只生成一种格式：
-
-```powershell
-uv run academic-profile generate phd --format latex
-uv run academic-profile generate phd --format docx
-uv run academic-profile generate phd --format pdf
-```
-
-## LaTeX 与 PDF
-
-LaTeX 模板是无照片、无图标、无技能进度条的单栏学术版式，保留 `.tex` 便于审查。生成命令依次查找 XeLaTeX、LuaLaTeX 和 pdfLaTeX；找到后自动编译两次并保留 PDF。
-
-当前机器如果没有 LaTeX 引擎，命令仍会生成 `.tex` 和 `.docx`，并明确提示安装 TeX Live 或 MiKTeX。含中文内容时优先安装并使用 XeLaTeX 或 LuaLaTeX。安装完成后重新运行原生成命令即可，无需修改数据。
-
-## Word
-
-Word 输出由 `python-docx` 生成并使用 `templates/docx/academic_cv_template.docx` 中的页面和段落样式。修改 `scripts/build_docx_template.py` 后执行：
-
-```powershell
-uv run python scripts/build_docx_template.py
-```
-
-Word 版本适合要求 `.docx` 的场景或提交前少量人工微调。正式修改应尽快回写 YAML，否则下次生成会覆盖临时改动。
-
-## 新增 Profile
-
-复制一个最接近的 `profiles/*.yaml`，修改 `profile`、`sections`、`max_items`、`max_priority` 和标签规则。文件名必须与 `profile` 值一致。之后可直接运行：
-
-```powershell
-uv run academic-profile generate your_profile
-```
-
-章节只能引用已有数据类别；`research_interests` 是从 `data/basics.yaml` 读取的虚拟章节。
-
-## 测试
-
-```powershell
+uv run academic-profile-desktop --home "D:\Zhaolian-Test-Library"
 uv run pytest
 ```
 
-测试覆盖 YAML 解析、ID 唯一性、Profile 筛选、日期格式、论文状态、跨表引用、五种 LaTeX 生成和 DOCX 生成。
+详见[开发与打包](docs/开发与打包.md)。项目源码、个人资料和私人备份仓库分别维护，公开项目不收集使用者的履历。
 
-## Git 与私人备份
+## 反馈与授权状态
 
-仓库应保持 Private。首次提交：
+欢迎在 Issues 中反馈使用体验。请勿上传自己的成绩单、电话号码、登录凭据或完整资料目录；说明操作步骤并提供脱敏截图即可。
 
-```powershell
-git status
-git add .
-git commit -m "Initialize academic profile database"
-```
-
-在 GitHub 上先创建一个空的 Private repository，再连接并推送：
-
-```powershell
-git remote add origin <your-private-repository-url>
-git branch -M main
-git push -u origin main
-```
-
-如果使用 GitHub CLI，也必须显式使用私有设置：
-
-```powershell
-gh repo create academic-profile --private --source . --remote origin --push
-```
-
-推送前始终运行 `git status` 和 `git check-ignore private/contact.yaml evidence/your-file.pdf`。被忽略的私人内容包括 `private/contact.yaml`、`evidence/` 中的材料和全部 `output/`。`data/` 可能仍含 GPA、排名、导师与未发表论文信息，因此即使忽略联系方式，远程仓库也必须保持私有。
-
-AI 连接令牌位于 Windows 当前用户的 `%LOCALAPPDATA%/AcademicProfile/chatgpt/`，未处理的原始笔记位于 `private/ai_notes/`；两者都不在应用的 GitHub 备份清单里。采纳并保存到 `data/` 的结构化履历记录会按手动备份流程上传。
-
-## 建议维护节奏
-
-论文投稿、课程结课、竞赛获奖、项目完成或暑研结束时立即更新相应记录。每学期末统一检查一次状态、证据、CV eligibility、priority、失效链接和五种 Profile 的生成结果。
+本项目目前提供公众试用，暂未添加开源许可证；不应理解为已经授予自由修改、再分发或商业使用的通用许可。依赖软件保持各自的许可，见 [第三方说明](THIRD_PARTY_NOTICES.md)。

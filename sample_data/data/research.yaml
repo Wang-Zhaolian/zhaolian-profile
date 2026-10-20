@@ -1,0 +1,41 @@
+version: 1
+records:
+  - id: research_001
+    title: Robust Evaluation of Small Image Classifiers
+    title_zh: 小型图像分类器的稳健评估
+    institution: Sample University
+    advisor: Prof. A. Researcher
+    start_date: 2025-03
+    end_date: 2026-02
+    status: completed
+    research_area: Reliable machine learning
+    research_question: How sensitive are compact classifiers to distribution shifts and evaluation choices?
+    description: A controlled empirical study using synthetic benchmark variants.
+    raw_details:
+      - Repeated experiments across seeds, corruptions, and calibration settings.
+      - Maintained a reproducible configuration and result archive.
+    my_contribution:
+      - Designed the evaluation matrix and implemented the training pipeline.
+      - Analyzed calibration and robustness metrics.
+    methods: [controlled experiments, calibration analysis, bootstrap confidence intervals]
+    tools: [Python, PyTorch, pandas]
+    results:
+      - Identified evaluation settings that changed model rankings in the synthetic benchmark.
+    outputs: [paper_001, presentation_001]
+    paper_ids: [paper_001]
+    presentation_ids: [presentation_001]
+    skill_ids: [skill_001, skill_002, skill_003]
+    repository: https://github.com/example/fictional-robust-evaluation
+    presentation: https://example.com/fictional-presentation
+    evidence: [evidence/sample-research-report.pdf]
+    cv_bullets:
+      - Designed a reproducible evaluation matrix across random seeds, synthetic corruptions, and calibration settings.
+      - Implemented the PyTorch experiment pipeline and analyzed robustness metrics with bootstrap confidence intervals.
+      - Documented model-ranking changes caused by evaluation choices and prepared a manuscript and research presentation.
+    cv_bullets_zh:
+      - 设计覆盖随机种子、合成扰动和校准设置的可复现实验矩阵。
+      - 使用 PyTorch 实现实验流程，并以自助法置信区间分析稳健性指标。
+    cv_eligible: true
+    priority: 1
+    tags: [machine_learning, experimentation, paper_reproduction]
+    notes: Synthetic example only.

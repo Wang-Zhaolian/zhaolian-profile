@@ -1,0 +1,17 @@
+昭濂个人履历库 0.3.0
+
+1. 完整解压本文件夹，双击 ZhaolianProfile-0.3.0.exe。
+2. 浏览器会自动打开；首次是一份空白资料库，无需安装 Python。
+3. 退出请使用页面内的退出按钮。
+
+默认资料保存在 %LOCALAPPDATA%\ZhaolianProfile，可在设置页查看实际位置。
+更新时保留资料目录，只更换程序。完整恢复副本需要复制整个资料目录。
+
+AI 需要自行授权 ChatGPT，账号资格、模型与额度以实际请求为准。
+Office 文档转 PDF 需要对应的本机 Microsoft Office 软件。
+GitHub 备份为可选功能，需要 Git、GitHub CLI 登录及自己的空白私有仓库。
+
+当前试用包未进行代码签名。请从官方地址下载并核对 SHA256，不必关闭系统安全防护。
+官方下载和说明：https://github.com/Wang-Zhaolian/zhaolian-profile
+
+本项目暂未添加开源许可证。第三方软件说明见 THIRD_PARTY_NOTICES.md 及 third-party-licenses 文件夹。

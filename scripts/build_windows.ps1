@@ -1,31 +1,27 @@
+param([switch]$SkipTests)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
-
-& uv sync --extra dev --extra build
-if ($LASTEXITCODE -ne 0) { throw 'Could not install the desktop build dependencies.' }
-
-$buildId = Get-Date -Format 'yyyyMMdd-HHmmss'
-$buildDist = Join-Path $projectRoot "dist\releases\$buildId"
-New-Item -ItemType Directory -Path $buildDist -Force | Out-Null
-& '.venv\Scripts\pyinstaller.exe' --noconfirm --clean --distpath $buildDist --workpath 'build\pyinstaller' 'academic-profile.spec'
-if ($LASTEXITCODE -ne 0) { throw 'The Windows desktop build failed.' }
-
-$executable = Join-Path $buildDist 'AcademicProfile-0.1.1\AcademicProfile-0.1.1.exe'
-if (-not (Test-Path -LiteralPath $executable)) { throw "Build output not found: $executable" }
-
-$desktopPath = [Environment]::GetFolderPath('Desktop')
-$productName = -join ([char[]]@(0x662D, 0x6FC2, 0x5B66, 0x672F, 0x6863, 0x6848))
-$productDescription = -join ([char[]]@(0x6253, 0x5F00, 0x672C, 0x673A, 0x662D, 0x6FC2, 0x5B66, 0x672F, 0x6863, 0x6848, 0x5E73, 0x53F0))
-$shortcutPath = Join-Path $desktopPath ($productName + '.lnk')
-$shell = New-Object -ComObject WScript.Shell
-$shortcut = $shell.CreateShortcut($shortcutPath)
-$shortcut.TargetPath = $executable
-$shortcut.Arguments = "--home `"$projectRoot`""
-$shortcut.WorkingDirectory = $projectRoot
-$shortcut.IconLocation = "$executable,0"
-$shortcut.Description = $productDescription
-$shortcut.Save()
-
-Write-Output "Desktop shortcut created: $shortcutPath"
-Write-Output "Application folder: $(Split-Path -Parent $executable)"
+& uv sync --frozen --extra dev --extra build
+if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
+if (-not $SkipTests) {
+    & uv run pytest
+    if ($LASTEXITCODE -ne 0) { throw 'Tests failed. Packaging stopped.' }
+}
+& uv run python scripts/collect_licenses.py
+if ($LASTEXITCODE -ne 0) { throw 'Third-party notice collection failed.' }
+$buildDist = Join-Path $projectRoot 'dist\public-0.3.0'
+if (Test-Path -LiteralPath $buildDist) { throw 'Release directory already exists. Use a new empty directory.' }
+& uv run pyinstaller --noconfirm --clean --distpath $buildDist --workpath 'build\pyinstaller' academic-profile.spec
+if ($LASTEXITCODE -ne 0) { throw 'Windows build failed.' }
+$appFolder = Join-Path $buildDist 'ZhaolianProfile-0.3.0'
+$guideName = -join ([char[]]@(0x5F00, 0x59CB, 0x4F7F, 0x7528))
+Copy-Item -LiteralPath (Join-Path $projectRoot ('docs\' + $guideName + '.txt')) -Destination $appFolder
+Copy-Item -LiteralPath (Join-Path $projectRoot 'THIRD_PARTY_NOTICES.md') -Destination $appFolder
+Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\third-party-licenses') -Destination $appFolder -Recurse
+$archive = Join-Path $buildDist 'ZhaolianProfile-0.3.0-windows-x64.zip'
+Compress-Archive -LiteralPath $appFolder -DestinationPath $archive
+$hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+[System.IO.File]::WriteAllText((Join-Path $buildDist 'SHA256SUMS.txt'), "$hash  ZhaolianProfile-0.3.0-windows-x64.zip`n", [System.Text.UTF8Encoding]::new($false))
+Write-Output "Release archive: $archive"
+Write-Output 'The desktop shortcut has not been changed.'

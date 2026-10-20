@@ -1,0 +1,29 @@
+version: 1
+records:
+  - id: skill_001
+    category: Programming
+    items: [Python, SQL, Bash]
+    level: Working proficiency supported by research and project evidence
+    evidence: [https://github.com/example]
+    last_used: 2026-02
+    cv_eligible: true
+    priority: 1
+    tags: [programming]
+  - id: skill_002
+    category: ML
+    items: [PyTorch, scikit-learn, experiment tracking]
+    level: Applied in coursework and research
+    evidence: [evidence/sample-research-report.pdf]
+    last_used: 2026-02
+    cv_eligible: true
+    priority: 1
+    tags: [machine_learning]
+  - id: skill_003
+    category: Research Tools
+    items: [Git, LaTeX, pytest, reproducible configuration]
+    level: Applied in research workflows
+    evidence: [https://github.com/example]
+    last_used: 2026-02
+    cv_eligible: true
+    priority: 1
+    tags: [research_tools]

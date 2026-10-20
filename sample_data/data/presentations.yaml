@@ -1,0 +1,15 @@
+version: 1
+records:
+  - id: presentation_001
+    title: Robust Evaluation of Small Image Classifiers
+    event: Sample Undergraduate Research Forum
+    date: 2026-01
+    location: Sample University
+    research_id: research_001
+    url: https://example.com/fictional-presentation
+    evidence: [evidence/sample-presentation.pdf]
+    cv_bullets:
+      - Presented the evaluation design, robustness findings, and limitations to a mixed technical audience.
+    cv_eligible: true
+    priority: 2
+    tags: [machine_learning, presentation]

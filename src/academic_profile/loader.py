@@ -25,7 +25,22 @@ def load_yaml(path: Path) -> dict[str, Any]:
 
 def load_master_data(data_dir: Path) -> dict[str, Any]:
     result: dict[str, Any] = {"basics": load_yaml(data_dir / "basics.yaml")}
-    for category in DATA_CATEGORIES:
+    categories = list(DATA_CATEGORIES)
+    registry_path = data_dir / "categories.yaml"
+    if registry_path.exists():
+        try:
+            from .categories import load_registry
+            registry = load_registry(data_dir.parent)
+        except (OSError, ValueError, yaml.YAMLError) as exc:
+            raise AcademicProfileError(f"Invalid category registry in {registry_path}: {exc}") from exc
+        if isinstance(registry, dict) and isinstance(registry.get("categories"), list):
+            for item in registry["categories"]:
+                category_id = item.get("id") if isinstance(item, dict) else None
+                if isinstance(category_id, str) and category_id not in categories:
+                    categories.append(category_id)
+    for category in categories:
+        if not category.replace("_", "").isalnum() or not category[:1].isalpha():
+            raise AcademicProfileError(f"Invalid category identifier: {category!r}")
         document = load_yaml(data_dir / f"{category}.yaml")
         records = document.get("records", [])
         if not isinstance(records, list):
@@ -51,4 +66,3 @@ def load_contact(path: Path | None) -> dict[str, Any]:
     if path is None or not path.exists():
         return {}
     return load_yaml(path)
-

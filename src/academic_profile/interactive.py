@@ -72,8 +72,6 @@ def add_record(
         else:
             record[field] = value
     record.setdefault("record_state", "draft")
-    record.setdefault("cv_eligible", False)
-    record.setdefault("priority", 3)
     record.setdefault("tags", [])
     records.append(record)
     path.write_text(

@@ -3,9 +3,8 @@ class AcademicProfileError(Exception):
 
 
 class DataValidationError(AcademicProfileError):
-    """Raised when generation is attempted with invalid data."""
+    """Raised when stored academic records fail schema validation."""
 
 
 class GenerationError(AcademicProfileError):
     """Raised when a requested output cannot be generated."""
-

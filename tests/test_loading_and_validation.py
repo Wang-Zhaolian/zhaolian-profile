@@ -21,13 +21,16 @@ def test_yaml_parsing_and_synthetic_validation(example_data_dir: Path) -> None:
     assert _validate(example_data_dir) == []
 
 
-def test_empty_master_record_is_valid() -> None:
-    assert _validate(ROOT / "data") == []
+def test_empty_master_record_is_valid(example_data_dir: Path) -> None:
+    for path in example_data_dir.glob("*.yaml"):
+        if path.name != "basics.yaml":
+            path.write_text("version: 1\nrecords: []\n", encoding="utf-8")
+    assert _validate(example_data_dir) == []
 
 
-def test_duplicate_id_is_rejected(tmp_path: Path) -> None:
+def test_duplicate_id_is_rejected(tmp_path: Path, example_data_dir: Path) -> None:
     target = tmp_path / "data"
-    shutil.copytree(ROOT / "data", target)
+    target = example_data_dir
     path = target / "awards.yaml"
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
     document["records"] = [{"id": "project_001", "record_state": "draft"}]
@@ -39,9 +42,9 @@ def test_duplicate_id_is_rejected(tmp_path: Path) -> None:
     assert any(issue.code == "duplicate_id" for issue in _validate(target))
 
 
-def test_publication_status_is_rejected(tmp_path: Path) -> None:
+def test_publication_status_is_rejected(tmp_path: Path, example_data_dir: Path) -> None:
     target = tmp_path / "data"
-    shutil.copytree(ROOT / "data", target)
+    target = example_data_dir
     path = target / "publications.yaml"
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
     document["records"] = [{
@@ -55,9 +58,9 @@ def test_publication_status_is_rejected(tmp_path: Path) -> None:
     )
 
 
-def test_missing_cross_reference_is_rejected(tmp_path: Path) -> None:
+def test_missing_cross_reference_is_rejected(tmp_path: Path, example_data_dir: Path) -> None:
     target = tmp_path / "data"
-    shutil.copytree(ROOT / "data", target)
+    target = example_data_dir
     path = target / "publications.yaml"
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
     document["records"] = [{
@@ -69,9 +72,9 @@ def test_missing_cross_reference_is_rejected(tmp_path: Path) -> None:
     assert any(issue.code == "missing_reference" for issue in _validate(target))
 
 
-def test_incomplete_draft_is_ignored_but_bad_state_is_rejected(tmp_path: Path) -> None:
+def test_incomplete_draft_is_ignored_but_bad_state_is_rejected(tmp_path: Path, example_data_dir: Path) -> None:
     target = tmp_path / "data"
-    shutil.copytree(ROOT / "data", target)
+    target = example_data_dir
     path = target / "research.yaml"
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
     document["records"] = [{"id": "research_001", "record_state": "draft"}]

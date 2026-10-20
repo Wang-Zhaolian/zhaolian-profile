@@ -7,6 +7,7 @@ from pathlib import Path
 
 import yaml
 
+from academic_profile.categories import default_registry
 from academic_profile.chatgpt_auth import AIServiceError
 from academic_profile.webapp import create_app
 
@@ -78,15 +79,18 @@ class QuotaProvider(FakeProvider):
 
 def _client(home: Path, *, auth=None, provider=None):
     home.mkdir(parents=True)
-    for directory in ("data", "schemas", "profiles", "templates"):
-        shutil.copytree(ROOT / directory, home / directory)
+    shutil.copytree(ROOT / "schemas", home / "schemas")
+    data = home / "data"
+    data.mkdir()
+    for category in default_registry()["categories"]:
+        (data / f"{category['id']}.yaml").write_text("version: 1\nrecords: []\n", encoding="utf-8")
     (home / "private").mkdir(parents=True)
     basics_path = home / "data" / "basics.yaml"
-    basics = yaml.safe_load(basics_path.read_text(encoding="utf-8"))
-    basics.update({
-        "name_en": "Example Student", "name_zh": "", "headline_en": "",
+    basics = {
+        "version": 1, "name_en": "Example Student", "name_zh": "", "headline_en": "",
         "headline_zh": "", "research_interests": ["Example topic"],
-    })
+        "research_interests_en": [],
+    }
     basics_path.write_text(yaml.safe_dump(basics, sort_keys=False, allow_unicode=True), encoding="utf-8")
     app = create_app(home, static_root=ROOT, ai_auth=auth, ai_provider=provider)
     return app.test_client(), app
@@ -176,15 +180,42 @@ def test_ai_saves_note_locally_builds_private_safe_context_and_returns_review_ca
     assert payload["records_count"] == 1
     assert payload["candidates"][0]["category"] == "research"
     assert payload["candidates"][0]["fields"]["status"] == "completed"
+    assert "cv_bullets_en" not in payload["candidates"][0]["fields"]
     assert "confidential@example.org" not in provider.input_text
     assert "415 555 0100" not in provider.input_text
     assert "certificate.pdf" not in provider.input_text
     assert "research_001" in provider.input_text
+    assert "Example Student" not in provider.input_text
     assert "不得编造" in provider.instructions
 
     # Proposals are never written into YAML without the user accepting them.
     saved_records = (home / "data" / "research.yaml").read_text(encoding="utf-8")
     assert "Microscopy Segmentation Study" not in saved_records
+
+    candidate = payload["candidates"][0]
+    revision = client.get("/api/records/research").get_json()["revision"]
+    adoption = {
+        "revision": revision,
+        "operation_id": candidate["operation_id"],
+        "record": {**candidate["fields"], "record_state": "draft"},
+    }
+    adopted = _post(client, "/api/records/research", adoption)
+    assert adopted.status_code == 200
+    assert adopted.get_json()["record"]["record_state"] == "draft"
+    retry = _post(client, "/api/records/research", {**adoption, "revision": "outdated"})
+    assert retry.status_code == 200
+    assert retry.get_json()["already_saved"] is True
+    assert len(client.get("/api/records/research").get_json()["records"]) == 2
+
+    marked = _post(client, f"/api/ai/notes/{note['id']}/batches/{payload['batch_id']}/candidates/{candidate['operation_id']}", {
+        "status": "adopted", "fields": candidate["fields"],
+    })
+    assert marked.status_code == 200
+    stored = client.get(f"/api/ai/notes/{note['id']}").get_json()
+    assert stored["batches"][0]["candidates"][0]["status"] == "adopted"
+    history = _post(client, f"/api/ai/notes/{note['id']}/status", {"completed": True})
+    assert history.status_code == 200
+    assert history.get_json()["note"]["completed"] is True
 
 
 def test_ai_proposals_require_subscription_permission_and_a_listed_model(tmp_path: Path) -> None:

@@ -1,0 +1,15 @@
+version: 1
+records:
+  - id: english_001
+    test: Sample English Proficiency Test
+    score: 112
+    subscores:
+      reading: 29
+      listening: 28
+      speaking: 27
+      writing: 28
+    date: 2025-08
+    evidence: [evidence/sample-language-score.pdf]
+    cv_eligible: true
+    priority: 2
+    tags: [language]

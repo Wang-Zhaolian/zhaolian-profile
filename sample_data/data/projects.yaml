@@ -1,0 +1,27 @@
+version: 1
+records:
+  - id: project_001
+    name: Reproducible Optimization Benchmark
+    name_zh: 可复现优化基准
+    type: Paper reproduction and software project
+    start_date: 2024-09
+    end_date: 2025-01
+    status: completed
+    description: Reimplemented baseline optimizers on synthetic convex problems.
+    raw_details:
+      - Compared convergence traces under fixed evaluation budgets.
+    my_contribution:
+      - Implemented the benchmark runner and automated result tables.
+    cv_bullets:
+      - Reimplemented four optimization baselines and standardized configuration, seeding, and metric export.
+      - Built automated regression checks for convergence traces and reduced repeated experiment setup to one command.
+    tech_stack: [Python, NumPy, pytest, GitHub Actions]
+    repository: https://github.com/example/fictional-optimization-benchmark
+    demo: https://example.com/fictional-demo
+    results:
+      - Produced reproducible comparisons under fixed evaluation budgets.
+    skill_ids: [skill_001, skill_003]
+    competition_ids: [competition_001]
+    cv_eligible: true
+    priority: 1
+    tags: [optimization, paper_reproduction, software]

@@ -1,0 +1,18 @@
+version: 1
+records:
+  - id: competition_001
+    name: Sample Reproducibility Challenge
+    level: National
+    organizer: Fictional Computing Society
+    date: 2025-02
+    result: Finalist
+    team: true
+    role: Experiment lead
+    description: Evaluated the reproducibility of optimization baselines.
+    project_id: project_001
+    evidence: [evidence/sample-competition-result.pdf]
+    cv_bullets:
+      - Led experiment design and verification for a three-person team reproducing optimization baselines.
+    cv_eligible: true
+    priority: 2
+    tags: [optimization, teamwork]

@@ -1,0 +1,8 @@
+version: 1
+records:
+  - id: link_001
+    label: Sample GitHub
+    url: https://github.com/example
+    cv_eligible: false
+    priority: 3
+    tags: [profile]

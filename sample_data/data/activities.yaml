@@ -1,0 +1,15 @@
+version: 1
+records:
+  - id: activity_001
+    name: Peer Research Methods Workshop
+    organization: Sample University Computing Society
+    role: Volunteer facilitator
+    start_date: 2025-03
+    end_date: 2025-06
+    status: completed
+    description: Helped peers structure reproducible small experiments.
+    cv_bullets:
+      - Facilitated three hands-on sessions on version control, experiment records, and result verification.
+    cv_eligible: true
+    priority: 4
+    tags: [service]

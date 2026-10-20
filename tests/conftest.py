@@ -12,11 +12,14 @@ sys.path.insert(0, str(ROOT / "src"))
 
 @pytest.fixture
 def example_data_dir(tmp_path: Path) -> Path:
-    """Create isolated synthetic records; never used by the desktop platform."""
+    """Create isolated synthetic records without reading the user's live data."""
     target = tmp_path / "data"
-    import shutil
-
-    shutil.copytree(ROOT / "data", target)
+    target.mkdir(parents=True)
+    for category in (
+        "education", "research", "publications", "projects", "awards", "competitions",
+        "coursework", "skills", "presentations", "english", "activities", "links",
+    ):
+        (target / f"{category}.yaml").write_text("version: 1\nrecords: []\n", encoding="utf-8")
     records = {
         "education": [{
             "id": "education_001", "institution": "Example University", "degree": "BS",
@@ -83,11 +86,14 @@ def example_data_dir(tmp_path: Path) -> Path:
     }
     for category, items in records.items():
         path = target / f"{category}.yaml"
-        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        document = {"version": 1, "records": []}
         document["records"] = items
         path.write_text(yaml.safe_dump(document, sort_keys=False, allow_unicode=True), encoding="utf-8")
     basics_path = target / "basics.yaml"
-    basics = yaml.safe_load(basics_path.read_text(encoding="utf-8"))
-    basics.update({"name_en": "Example Student", "research_interests": ["Example topic"]})
+    basics = {
+        "version": 1, "name_en": "Example Student", "name_zh": "示例学生",
+        "headline_en": "", "headline_zh": "", "research_interests": ["Example topic"],
+        "research_interests_en": [],
+    }
     basics_path.write_text(yaml.safe_dump(basics, sort_keys=False, allow_unicode=True), encoding="utf-8")
     return target

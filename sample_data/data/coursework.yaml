@@ -1,0 +1,34 @@
+version: 1
+records:
+  - id: course_001
+    course_name: Machine Learning
+    institution: Sample University
+    semester: Fall 2025
+    credits: 4
+    grade: A
+    rank_if_known: null
+    category: Machine Learning
+    level: advanced
+    topics: [generalization, regularization, probabilistic models]
+    skill_ids: [skill_002]
+    transcript_visible: true
+    cv_eligible: true
+    priority: 1
+    tags: [machine_learning]
+    notes: Synthetic course record.
+  - id: course_002
+    course_name: Convex Optimization
+    institution: Sample University
+    semester: Spring 2025
+    credits: 3
+    grade: A-
+    rank_if_known: null
+    category: Optimization
+    level: advanced
+    topics: [duality, first-order methods, constrained optimization]
+    skill_ids: [skill_003]
+    transcript_visible: true
+    cv_eligible: true
+    priority: 1
+    tags: [optimization, theory_only]
+    notes: Synthetic course record.

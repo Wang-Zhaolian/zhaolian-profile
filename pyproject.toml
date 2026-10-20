@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "academic-profile"
-version = "0.1.1"
-description = "Single-source academic record and profile-aware CV generator"
+version = "0.3.0"
+description = "Chinese-first local academic record library with ChatGPT-assisted organization"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

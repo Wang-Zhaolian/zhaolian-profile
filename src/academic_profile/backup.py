@@ -1,49 +1,35 @@
-"""Explicit, allowlisted GitHub backup operations for the local interface."""
-
+"""Private data backups isolated from the public source working tree."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import shutil
 import subprocess
-import tempfile
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+import yaml
 
-TARGET_REPOSITORY = "Wang-Zhaolian/academic-profile"
-TARGET_REMOTE = f"https://github.com/{TARGET_REPOSITORY}.git"
-_CREDENTIAL_URL = re.compile(r"(https?://)[^/@\s]+@", re.IGNORECASE)
+from . import __version__
+from .categories import load_registry
+from .library import atomic_json, file_lock, library_id
+from .loader import load_master_data
 
-STAGE_PATHS = (
-    ".gitattributes", ".gitignore", "ADD_RECORD.md", "README.md", "Makefile",
-    "pyproject.toml", "uv.lock", "generate.py", "add.py", "start.pyw",
-    "academic-profile.spec", "profiles", "schemas", "data", "src",
-    "scripts", "static", "templates", "tests",
-)
-PRIVATE_PATHS = (
-    "private/contact.yaml", "%LOCALAPPDATA%/AcademicProfile/chatgpt", "private/ai_notes",
-    "evidence", "output", ".venv", "dist",
-)
-
-
-def _is_allowlisted(path: str) -> bool:
-    normalized = path.replace("\\", "/")
-    if normalized.startswith("./"):
-        normalized = normalized[2:]
-    return any(
-        normalized == allowed or normalized.startswith(allowed.rstrip("/") + "/")
-        for allowed in STAGE_PATHS
-    )
+STAGE_PATHS = ("data", "backup-manifest.json")
+PRIVATE_PATHS = ("private", "evidence", "output", ".runtime", "%LOCALAPPDATA%/AcademicProfile/chatgpt")
+_REPOSITORY = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}")
+_LOCK = threading.RLock()
 
 
 @dataclass
 class BackupStatus:
-    repository: str = "尚未创建"
+    repository: str = "尚未配置"
     is_private: bool | None = None
     origin_matches: bool | None = None
     pending: bool = False
@@ -52,234 +38,209 @@ class BackupStatus:
     message: str = ""
 
 
-def _run(home: Path, args: list[str], *, timeout: int = 90) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        args,
-        cwd=home,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=timeout,
-        check=False,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-    )
+def load_config(home: Path) -> dict[str, Any]:
+    path = home / "private" / "backup.local.json"
+    if not path.exists():
+        return {"repository": ""}
+    value = json.loads(path.read_text(encoding="utf-8"))
+    repository = value.get("repository", "")
+    if not isinstance(repository, str) or (repository and not _REPOSITORY.fullmatch(repository)):
+        raise ValueError("本机备份配置损坏，请重新设置。")
+    return {"repository": repository}
 
 
-def _runtime_file(home: Path) -> Path:
-    return home / "private" / "runtime.local.json"
+def save_config(home: Path, repository: Any) -> dict[str, Any]:
+    if not isinstance(repository, str):
+        raise ValueError("仓库格式应为 用户名/仓库名。")
+    repository = repository.strip()
+    if repository and (not _REPOSITORY.fullmatch(repository) or repository.split("/")[1] in {".", ".."}):
+        raise ValueError("请填写 用户名/仓库名，不包含网址、密码或访问令牌。")
+    with _LOCK, file_lock(home / ".runtime" / "backup.lock"):
+        value = {"repository": repository}
+        atomic_json(home / "private" / "backup.local.json", value)
+        return value
 
 
-def _safe_diagnostic(result: subprocess.CompletedProcess[str] | None, fallback: str) -> str:
-    if result is None:
-        return fallback
-    detail = (result.stderr or result.stdout or "").strip()
-    detail = _CREDENTIAL_URL.sub(r"\1[已隐藏]@", detail)
-    detail = " ".join(detail.split())
-    if not detail:
-        return fallback
-    return f"{fallback}（{detail[:500]}）"
+def _run(directory: Path, args: list[str], *, timeout: int = 90) -> subprocess.CompletedProcess[str]:
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GH_PROMPT_DISABLED="1", GCM_INTERACTIVE="never")
+    return subprocess.run(args, cwd=directory, capture_output=True, text=True, encoding="utf-8",
+                          errors="replace", timeout=timeout, check=False, env=env,
+                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
 
-def _github_details(home: Path) -> dict[str, Any]:
-    result = _run(
-        home,
-        ["gh", "api", f"repos/{TARGET_REPOSITORY}"],
-        timeout=12,
-    )
+def _git(directory: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return _run(directory, ["git", "-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential", *args])
+
+
+def _diagnostic(result, message: str) -> str:
+    detail = " ".join((result.stderr or result.stdout or "").split())
+    detail = re.sub(r"(https?://)[^/@\s]+@", r"\1[已隐藏]@", detail)
+    detail = re.sub(r"\b(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]+)\b", "[已隐藏]", detail)
+    return f"{message}（{detail[:400]}）" if detail else message
+
+
+def _checked(result, message: str):
     if result.returncode:
-        raise RuntimeError(_safe_diagnostic(result, "无法读取指定的 GitHub 仓库。"))
+        raise RuntimeError(_diagnostic(result, message))
+    return result
+
+
+def _verify_repository(home: Path, repository: str) -> dict:
+    if shutil.which("git") is None or shutil.which("gh") is None:
+        raise RuntimeError("备份需要安装 Git 和 GitHub CLI，并先在 GitHub CLI 登录；本机录入不受影响。")
+    result = _checked(_run(home, ["gh", "api", f"repos/{repository}"], timeout=15), "无法读取仓库，请检查 GitHub CLI 登录状态、仓库名及网络。")
     try:
-        details = json.loads(result.stdout)
-    except ValueError:
-        raise RuntimeError("GitHub 返回了无法识别的仓库信息。") from None
-    if not isinstance(details, dict) or str(details.get("full_name", "")).casefold() != TARGET_REPOSITORY.casefold():
-        raise RuntimeError("GitHub 返回的仓库名称与目标仓库不一致，已停止备份。")
-    if details.get("private") is not True:
-        raise RuntimeError("Wang-Zhaolian/academic-profile 不是 Private 仓库。为保护资料，本次备份已取消。")
-    return details
+        value = json.loads(result.stdout)
+    except ValueError as exc:
+        raise RuntimeError("GitHub 返回的仓库信息无法识别，请稍后重试。") from exc
+    if not isinstance(value, dict):
+        raise RuntimeError("GitHub 返回的仓库信息无法识别，请稍后重试。")
+    if value.get("full_name", "").casefold() != repository.casefold():
+        raise RuntimeError("返回的仓库名称与设置不一致，已停止上传。")
+    if value.get("private") is not True:
+        raise RuntimeError("目标仓库不是私有仓库，已停止上传。请使用单独的私有资料备份仓库。")
+    if value.get("permissions", {}).get("push") is not True:
+        raise RuntimeError("当前 GitHub 账号没有此仓库的推送权限。")
+    return value
 
 
-def _origin_matches_target(value: str) -> bool:
-    remote = value.strip().replace("\\", "/")
-    if remote.startswith("git@github.com:"):
-        remote = remote[len("git@github.com:"):]
-    else:
-        try:
-            parsed = urlsplit(remote)
-        except ValueError:
-            return False
-        if parsed.hostname != "github.com":
-            return False
-        remote = parsed.path
-    remote = remote.removesuffix(".git").strip("/")
-    return remote.casefold() == TARGET_REPOSITORY.casefold()
+def _paths(home: Path, repository: str) -> tuple[Path, Path]:
+    key = hashlib.sha256(repository.casefold().encode()).hexdigest()[:20]
+    base = home / "private" / "github-backups"
+    return base / key, base / f"{key}.local.json"
+
+
+def _snapshot(home: Path) -> dict[str, bytes]:
+    documents = load_master_data(home / "data")
+    documents["categories"] = load_registry(home)
+    result = {}
+    for name, value in documents.items():
+        if name not in {"basics", "categories"}:
+            value = {"version": 1, "records": [{key: item for key, item in record.items()
+                     if key != "evidence" and not key.startswith("_")} for record in value]}
+        result[f"data/{name}.yaml"] = yaml.safe_dump(value, allow_unicode=True, sort_keys=False).encode("utf-8")
+    result["backup-manifest.json"] = (json.dumps({"format": "zhaolian-profile-backup", "version": 1,
+        "library_id": library_id(home), "app_version": __version__}, sort_keys=True, indent=2) + "\n").encode()
+    return result
+
+
+def _digest(snapshot: dict[str, bytes]) -> str:
+    digest = hashlib.sha256()
+    for name, content in sorted(snapshot.items()):
+        digest.update(name.encode() + b"\0" + content + b"\0")
+    return digest.hexdigest()
+
+
+def _read_state(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _remote_matches(value: str, repository: str) -> bool:
+    parsed = urlsplit(value.strip())
+    return (parsed.scheme == "https" and parsed.hostname == "github.com" and parsed.username is None
+            and parsed.password is None and parsed.path.strip("/").removesuffix(".git").casefold() == repository.casefold())
 
 
 def status(home: Path, *, refresh: bool = False) -> BackupStatus:
-    result = BackupStatus()
-    state_path = _runtime_file(home)
-    cached: dict[str, Any] = {}
-    if state_path.exists():
-        try:
-            cached = json.loads(state_path.read_text(encoding="utf-8"))
-            result.last_successful_backup = cached.get("last_successful_backup")
-        except (OSError, ValueError):
-            pass
-
-    github_cli_available = shutil.which("gh") is not None
-    remote = _run(home, ["git", "remote", "get-url", "origin"])
-    if remote.returncode == 0:
-        result.repository = TARGET_REPOSITORY
-        result.origin_matches = _origin_matches_target(remote.stdout)
-        if not result.origin_matches:
-            result.message = "origin 指向的仓库不是 Wang-Zhaolian/academic-profile，已停止备份。"
-            result.is_private = None
-        if refresh and github_cli_available:
-            try:
-                details = _github_details(home)
-            except subprocess.TimeoutExpired:
-                result.is_private = None
-                result.message = "连接 GitHub 超时；本机记录不受影响。"
-            except RuntimeError as exc:
-                result.is_private = None
-                result.message = str(exc)
-            else:
-                result.repository = str(details.get("full_name", TARGET_REPOSITORY))
-                result.is_private = True
-        elif refresh and not github_cli_available:
-            result.message = "没有找到 GitHub CLI。请安装 GitHub CLI 并登录后重试。"
-        elif not result.message:
-            result.is_private = cached.get("is_private")
-            result.message = "显示上次核验结果；点击刷新可重新检查 GitHub。"
-    elif github_cli_available:
-        result.repository = TARGET_REPOSITORY
-        result.origin_matches = None
-        result.message = "备份时会核验并连接指定的 Private 仓库。"
-    else:
-        result.repository = TARGET_REPOSITORY
-        result.message = "没有找到 GitHub CLI。请安装 GitHub CLI 并登录后重试。"
-
-    staged = _run(home, ["git", "diff", "--cached", "--name-only"])
-    worktree = _run(home, ["git", "diff", "--name-only"])
-    untracked = _run(home, ["git", "ls-files", "--others", "--exclude-standard"])
-    changed_paths = (
-        staged.stdout.splitlines() + worktree.stdout.splitlines() + untracked.stdout.splitlines()
-    )
-    result.pending = any(_is_allowlisted(path) for path in changed_paths)
-    branch = _run(home, ["git", "branch", "--show-current"])
-    branch_name = branch.stdout.strip() if branch.returncode == 0 else ""
-    if branch_name:
-        ahead = _run(home, ["git", "rev-list", "--count", f"refs/remotes/origin/{branch_name}..HEAD"])
-        if ahead.returncode == 0 and ahead.stdout.strip().isdigit() and int(ahead.stdout.strip()) > 0:
-            result.pending_commits = int(ahead.stdout.strip())
-            result.pending = True
-        elif ahead.returncode == 128:
-            if result.origin_matches is True:
-                local_commits = _run(home, ["git", "rev-list", "--count", "HEAD"])
-                if local_commits.returncode == 0:
-                    result.pending_commits = int(local_commits.stdout.strip() or "0")
-                    result.pending = result.pending or result.pending_commits > 0
-        elif ahead.returncode:
-            result.message = result.message or _safe_diagnostic(ahead, "无法检查尚未推送的本地提交。")
-    if result.is_private is False:
-        result.message = "当前远程仓库不是 Private，已停用上传。"
+    try:
+        repository = load_config(home)["repository"]
+    except (OSError, ValueError) as exc:
+        return BackupStatus(message=str(exc))
+    if not repository:
+        return BackupStatus(message="请先填写你自己的私有仓库；未配置时不会上传任何资料。")
+    directory, state_path = _paths(home, repository)
+    state = _read_state(state_path)
+    result = BackupStatus(repository=repository, last_successful_backup=state.get("last_successful_backup"),
+                          is_private=state.get("is_private"))
+    try:
+        result.pending = state.get("digest") != _digest(_snapshot(home))
+        if (directory / ".git").is_dir() and shutil.which("git"):
+            remote = _git(directory, "config", "--get", "remote.origin.url")
+            result.origin_matches = not remote.returncode and _remote_matches(remote.stdout, repository)
+            ahead = _git(directory, "rev-list", "--count", "origin/main..HEAD")
+            if ahead.returncode == 0:
+                result.pending_commits = int(ahead.stdout.strip())
+            elif _git(directory, "rev-parse", "--verify", "HEAD").returncode == 0:
+                result.pending_commits = int(_git(directory, "rev-list", "--count", "HEAD").stdout.strip())
+            result.pending = result.pending or result.pending_commits > 0
+        if refresh:
+            _verify_repository(home, repository)
+            result.is_private = True
+            result.message = "已核验私有仓库；点击备份才会提交资料。"
+        else:
+            result.message = "显示本机状态；推送前会重新核验仓库。"
+    except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as exc:
+        result.is_private = None
+        result.message = str(exc)
     return result
 
 
-def _stage_allowed_paths(home: Path) -> None:
-    existing = [path for path in STAGE_PATHS if (home / path).exists()]
-    if existing:
-        result = _run(home, ["git", "add", "--", *existing])
-        if result.returncode:
-            raise RuntimeError(result.stderr.strip() or "无法准备备份文件。")
-    cached = _run(home, ["git", "diff", "--cached", "--name-only"])
-    if cached.returncode:
-        raise RuntimeError(cached.stderr.strip() or "无法检查备份文件。")
-    paths = {line.replace("\\", "/") for line in cached.stdout.splitlines()}
-    unapproved = [path for path in paths if not _is_allowlisted(path)]
-    if unapproved:
-        raise RuntimeError("暂存区里有不在 GitHub 备份清单中的文件，已停止上传：" + ", ".join(sorted(unapproved)))
-    forbidden = [
-        path for path in paths
-        if path.endswith("/contact.yaml") or path == "contact.yaml"
-        or path.startswith(("evidence/", "output/", ".venv/", "dist/"))
-        or path.startswith(("private/ai/", "private/ai_notes/"))
-        or path in {"private/runtime.local.json", "private/ai_auth.local.json"}
-    ]
-    if forbidden:
-        raise RuntimeError("备份里检测到本机文件，已停止：" + ", ".join(sorted(forbidden)))
-
-
-def _ensure_private_origin(home: Path) -> str:
-    details = _github_details(home)
-    remote = _run(home, ["git", "remote", "get-url", "origin"])
-    if remote.returncode != 0:
-        added = _run(home, ["git", "remote", "add", "origin", TARGET_REMOTE])
-        if added.returncode:
-            raise RuntimeError(_safe_diagnostic(added, "无法连接指定 GitHub 仓库。"))
-        remote = _run(home, ["git", "remote", "get-url", "origin"])
-    if remote.returncode:
-        raise RuntimeError(_safe_diagnostic(remote, "无法读取 origin 地址。"))
-    if not _origin_matches_target(remote.stdout):
-        safe_remote = _CREDENTIAL_URL.sub(r"\1[已隐藏]@", remote.stdout.strip())
-        raise RuntimeError(
-            f"origin 当前指向其他仓库（{safe_remote}）。为避免上传到错误位置，已停止备份。"
-        )
-    return str(details["full_name"])
+def _validate_tree(directory: Path, tree: str, identity: str) -> None:
+    paths = _checked(_git(directory, "ls-tree", "-r", "--name-only", tree), "无法检查备份仓库内容。").stdout.splitlines()
+    if any(not (name == "backup-manifest.json" or re.fullmatch(r"data/[A-Za-z][A-Za-z0-9_]*\.yaml", name)) for name in paths):
+        raise RuntimeError("仓库已有其他项目的文件，已停止上传；请选择空仓库或本资料库的专用备份仓库。")
+    manifest = _git(directory, "show", f"{tree}:backup-manifest.json")
+    try:
+        value = json.loads(manifest.stdout)
+    except ValueError:
+        value = {}
+    if (value.get("format") != "zhaolian-profile-backup" or value.get("version") != 1
+            or value.get("library_id") != identity):
+        raise RuntimeError("仓库不是这份资料库的备份，已停止上传，未覆盖远端。")
 
 
 def backup(home: Path) -> BackupStatus:
-    if shutil.which("git") is None or shutil.which("gh") is None:
-        raise RuntimeError("需要安装并登录 GitHub CLI 才能备份。")
-    target_repository = _ensure_private_origin(home)
-    _stage_allowed_paths(home)
-
-    staged = _run(home, ["git", "diff", "--cached", "--quiet"])
-    head = _run(home, ["git", "rev-parse", "--verify", "HEAD"])
-    if staged.returncode == 1:
-        stamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
-        committed = _run(home, ["git", "commit", "-m", f"Update academic profile backup {stamp}"])
-        if committed.returncode:
-            raise RuntimeError(committed.stderr.strip() or "无法创建备份记录。请检查 Git 用户名和邮箱。")
-    elif head.returncode != 0:
-        raise RuntimeError("没有可以备份的程序或数据文件。")
-
-    branch = _run(home, ["git", "branch", "--show-current"])
-    branch_name = branch.stdout.strip() or "main"
-    pushed = _run(home, ["git", "push", "-u", "origin", branch_name])
-    if pushed.returncode:
-        diagnostic = _safe_diagnostic(pushed, "GitHub 未接受此次推送。")
-        raise RuntimeError(
-            "GitHub 备份失败，本机内容仍已保存。远程可能存在新提交；请先处理同步冲突后重试。\n"
-            + diagnostic
-        )
-
-    result = BackupStatus()
-    result.repository = target_repository
-    result.is_private = True
-    result.origin_matches = True
-    result.pending = False
-    result.last_successful_backup = datetime.now().astimezone().isoformat(timespec="seconds")
-    result.message = "已备份到 Private GitHub 仓库。"
-    state = {
-        "last_successful_backup": result.last_successful_backup,
-        "repository": result.repository,
-        "is_private": True,
-    }
-    state_path = _runtime_file(home)
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    handle, temporary = tempfile.mkstemp(prefix="backup-state-", suffix=".tmp", dir=state_path.parent)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
-            stream.write(json.dumps(state, ensure_ascii=False, indent=2) + "\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, state_path)
-    except BaseException:
-        try:
-            os.unlink(temporary)
-        except OSError:
-            pass
-        raise
-    return result
+    with _LOCK, file_lock(home / ".runtime" / "backup.lock"):
+        repository = load_config(home)["repository"]
+        if not repository:
+            raise RuntimeError("请先保存你自己的私有仓库设置。")
+        _verify_repository(home, repository)
+        snapshot = _snapshot(home)
+        identity = json.loads(snapshot["backup-manifest.json"])["library_id"]
+        directory, state_path = _paths(home, repository)
+        directory.mkdir(parents=True, exist_ok=True)
+        if not (directory / ".git").exists():
+            _checked(_git(directory, "init", "--initial-branch=main"), "无法创建本机备份目录。")
+            _checked(_git(directory, "remote", "add", "origin", f"https://github.com/{repository}.git"), "无法设置备份地址。")
+            _checked(_git(directory, "config", "user.name", "Zhaolian Profile Backup"), "无法设置备份身份。")
+            _checked(_git(directory, "config", "user.email", "backup@localhost"), "无法设置备份身份。")
+        remote = _checked(_git(directory, "config", "--get", "remote.origin.url"), "无法读取备份地址。")
+        if not _remote_matches(remote.stdout, repository):
+            raise RuntimeError("本机备份目录的远程地址与设置不一致，已停止上传。")
+        refs = _checked(_git(directory, "ls-remote", "--heads", "--tags", "origin"), "无法连接备份仓库。")
+        has_remote = bool(refs.stdout.strip())
+        has_head = _git(directory, "rev-parse", "--verify", "HEAD").returncode == 0
+        if has_remote:
+            if any(line.split()[1] != "refs/heads/main" for line in refs.stdout.splitlines()):
+                raise RuntimeError("备份仓库包含其他分支，请使用空仓库或本资料库的专用备份仓库。")
+            _checked(_git(directory, "fetch", "origin", "+refs/heads/main:refs/remotes/origin/main"), "无法读取远端备份。")
+            _validate_tree(directory, "origin/main", identity)
+            if has_head:
+                if _git(directory, "merge-base", "--is-ancestor", "origin/main", "HEAD").returncode:
+                    raise RuntimeError("远端备份已有不同的更新，已停止上传；本机资料不受影响。")
+            else:
+                _checked(_git(directory, "checkout", "-B", "main", "origin/main"), "无法连接现有备份。")
+        if has_head:
+            _validate_tree(directory, "HEAD", identity)
+        data_dir = directory / "data"
+        data_dir.mkdir(exist_ok=True)
+        for old in data_dir.iterdir():
+            if old.relative_to(directory).as_posix() not in snapshot:
+                raise RuntimeError("备份目录出现不属于当前资料库的文件，已停止上传。")
+        for name, contents in snapshot.items():
+            (directory / name).write_bytes(contents)
+        _checked(_git(directory, "add", "--", *snapshot), "无法准备履历备份。")
+        cached = _checked(_git(directory, "diff", "--cached", "--name-only"), "无法检查待上传文件。")
+        if any(name not in snapshot for name in cached.stdout.splitlines()):
+            raise RuntimeError("备份暂存区包含未获允许的文件，已停止上传。")
+        if cached.stdout.strip():
+            _checked(_git(directory, "commit", "-m", "Update personal library backup"), "无法保存备份提交。")
+        _verify_repository(home, repository)
+        _checked(_git(directory, "push", "-u", "origin", "main"), "备份推送失败，可能存在远端冲突；本机资料仍已保存，可重试。")
+        state = {"digest": _digest(snapshot), "last_successful_backup": datetime.now().astimezone().isoformat(timespec="seconds"), "is_private": True}
+        atomic_json(state_path, state)
+        return BackupStatus(repository=repository, is_private=True, origin_matches=True,
+                            last_successful_backup=state["last_successful_backup"], message="已备份到你的私有 GitHub 仓库。")

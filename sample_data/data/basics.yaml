@@ -1,0 +1,9 @@
+version: 1
+name_en: Sample Student
+name_zh: 示例学生
+headline_en: Undergraduate Researcher in Machine Learning and Optimization
+headline_zh: 机器学习与优化方向本科生研究者
+research_interests:
+  - Reliable machine learning
+  - Optimization for data-driven systems
+  - Reproducible empirical research

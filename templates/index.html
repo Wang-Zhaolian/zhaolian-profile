@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>昭濂学术档案</title>
+  <title>昭濂个人履历库</title>
   <link rel="icon" type="image/png" href="/static/branding/favicon.png">
   <link rel="stylesheet" href="/static/app.css">
 </head>
@@ -13,22 +13,22 @@
     <aside class="sidebar" aria-label="主导航">
       <button class="brand" data-view="dashboard" aria-label="返回总览" title="学术履历总览">
         <img class="brand-mark" src="/static/branding/zhaolian-app.png" alt="">
-        <span class="brand-copy"><strong>昭濂学术档案</strong><small>个人履历工作台</small></span>
+        <span class="brand-copy"><strong>昭濂个人履历库</strong><small>个人履历工作台</small></span>
       </button>
 
       <div class="nav-caption">工作台</div>
       <nav id="primary-nav" class="nav-list">
         <button class="nav-item" data-view="dashboard"><span class="nav-icon">◫</span><span>总览</span></button>
-        <button class="nav-item" data-view="notes"><span class="nav-icon">✎</span><span>素材箱</span></button>
+        <button class="nav-item" data-view="notes"><span class="nav-icon">✎</span><span>草稿箱</span></button>
         <button class="nav-item" data-view="basics"><span class="nav-icon">○</span><span>个人资料</span></button>
       </nav>
 
       <div class="nav-caption nav-caption-spaced">学术档案</div>
       <nav id="category-nav" class="nav-list"></nav>
+      <button class="nav-item category-manage-nav" data-view="category-manager"><span class="nav-icon">＋</span><span>管理分类</span></button>
 
       <div class="sidebar-spacer"></div>
       <div class="sidebar-bottom">
-        <button class="nav-item" data-view="cv"><span class="nav-icon">▤</span><span>简历生成</span></button>
         <button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span><span>备份与设置</span></button>
         <div class="local-note"><span class="local-dot"></span><span>保存在这台电脑</span></div>
         <button id="quit-button" class="quit-button" type="button">退出平台</button>
@@ -37,7 +37,7 @@
 
     <main class="main-area">
       <header class="topbar">
-        <div class="topbar-left"><button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="收起分类导航" aria-expanded="true" title="收起或展开导航">☷</button><div class="breadcrumbs"><span>学术履历</span><span class="crumb-divider">/</span><strong id="page-breadcrumb">总览</strong></div></div>
+        <div class="topbar-left"><button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="收起分类导航" aria-expanded="true" title="收起或展开导航">☷</button><div class="breadcrumbs"><span>昭濂个人履历库</span><span class="crumb-divider">/</span><strong id="page-breadcrumb">总览</strong></div></div>
         <div class="topbar-right"><button id="ai-status-pill" class="ai-status-pill" type="button" data-view="settings" title="查看 ChatGPT 连接状态"><span class="ai-status-dot"></span><span id="ai-status-text">ChatGPT 未连接</span></button><span class="autosave-label"><span class="local-dot"></span>本机模式</span><button class="avatar" data-view="basics" aria-label="个人资料">我</button></div>
       </header>
       <div id="app-content" class="content-area" tabindex="-1"></div>
