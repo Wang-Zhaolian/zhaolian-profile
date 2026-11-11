@@ -129,7 +129,7 @@ def _desktop(home: Path) -> int:
     if getattr(sys, "frozen", False):
         command = [sys.executable, "--serve", "--home", str(home), "--port", str(port)]
     else:
-        command = [sys.executable, "-m", "academic_profile.desktop", "--serve", "--home", str(home), "--port", str(port)]
+        command = [sys.executable, str(resource_root() / 'start.pyw'), "--serve", "--home", str(home), "--port", str(port)]
 
     runtime = _runtime_root(home)
     runtime.mkdir(parents=True, exist_ok=True)
