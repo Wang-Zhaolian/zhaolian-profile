@@ -23,6 +23,7 @@ jobs:
           security unlock-keychain -p ci-test-only "$RUNNER_TEMP/zhaolian-tests.keychain-db"
           security default-keychain -d user -s "$RUNNER_TEMP/zhaolian-tests.keychain-db"
           security list-keychains -d user -s "$RUNNER_TEMP/zhaolian-tests.keychain-db"
+          brew update
           brew install --cask libreoffice
       - run: uv run pytest
       - run: uv run python scripts/check_release.py
