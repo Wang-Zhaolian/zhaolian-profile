@@ -16,7 +16,7 @@
 
 无需安装 Python。首次启动是一份空白资料库，之后录入的内容保存在 Windows 当前用户的 `%LOCALAPPDATA%\ZhaolianProfile` 中。更新时替换程序文件即可，保留资料目录。退出请使用页面中的退出按钮。
 
-目前提供 Windows x64 试用包；其他系统没有经过桌面版验收。安装包暂未进行代码签名，可用发布页的 SHA256 校验值核对文件来源；无需关闭系统安全防护。
+现有发布页提供 Windows x64 试用包。0.4.0 增加 macOS 的 M 系列／Intel 原生构建、钥匙串登录保护和整夹迁移支持，详见 [Mac 迁移指南](docs/Mac迁移指南.md)。Mac 构建包保留在自动测试的构建产物中。程序暂未经过开发者签名公证，请核对来源与 SHA256；无需关闭系统安全防护。
 
 ## 可以做什么
 
@@ -39,7 +39,7 @@
 
 AI 是可选功能，使用者需要自行登录授权。账号资格、地区、权限、可用模型及额度以实际授权和请求结果为准，不保证所有 ChatGPT 订阅账号均可使用。授权不会授予读取既有 ChatGPT 对话的权限。未连接 AI 时仍可手工维护资料。
 
-支持 PNG、JPG、WEBP、PDF、DOCX、TXT、Markdown、XLSX、PPTX。只有主动发起 AI 整理时，选中的内容才会发送用于识读。Office 文档转 PDF 使用本机 Microsoft Word、Excel 或 PowerPoint；没有对应软件或转换失败时，可自行转成 PDF 上传。
+支持 PNG、JPG、WEBP、PDF、DOCX、TXT、Markdown、XLSX、PPTX。只有主动发起 AI 整理时，选中的内容才会发送用于识读。Office 文档转 PDF 在 Windows 使用本机 Microsoft Office，在 Mac 使用 LibreOffice；没有对应软件或转换失败时，可自行转成 PDF 上传。
 
 ## 源码运行
 

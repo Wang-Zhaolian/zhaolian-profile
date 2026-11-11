@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "academic-profile"
-version = "0.3.0"
+version = "0.4.0"
 description = "Chinese-first local academic record library with ChatGPT-assisted organization"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,6 +17,7 @@ dependencies = [
   "python-docx>=1.1,<2",
   "PyYAML>=6.0,<7",
   "waitress>=3.0,<4",
+  "keyring>=25.7,<26; sys_platform == 'darwin'",
 ]
 
 [project.optional-dependencies]

@@ -47,6 +47,13 @@ def _message(message: str) -> None:
         import ctypes
         ctypes.windll.user32.MessageBoxW(None, message, "昭濂个人履历库", 0x10)
     else:
+        if sys.platform == 'darwin':
+            try:
+                script = 'on run argv\ndisplay dialog (item 1 of argv) with title "昭濂个人履历库" buttons {"好"} default button 1\nend run'
+                subprocess.run(['/usr/bin/osascript', '-e', script, message], timeout=60, check=False)
+                return
+            except (OSError, subprocess.TimeoutExpired):
+                pass
         print(message, file=sys.stderr)
 
 
@@ -136,6 +143,7 @@ def _desktop(home: Path) -> int:
             stdout=log_file,
             stderr=subprocess.STDOUT,
             creationflags=creationflags,
+            start_new_session=(os.name != 'nt'),
             close_fds=True,
         )
 

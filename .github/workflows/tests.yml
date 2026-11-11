@@ -3,13 +3,45 @@ on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
 jobs:
-  windows-tests:
-    runs-on: windows-latest
+  platform-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.14'
       - run: uv sync --frozen --extra dev
+      - name: Prepare isolated macOS Keychain and converter
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          security create-keychain -p ci-test-only "$RUNNER_TEMP/zhaolian-tests.keychain-db"
+          security unlock-keychain -p ci-test-only "$RUNNER_TEMP/zhaolian-tests.keychain-db"
+          security default-keychain -d user -s "$RUNNER_TEMP/zhaolian-tests.keychain-db"
+          security list-keychains -d user -s "$RUNNER_TEMP/zhaolian-tests.keychain-db"
+          brew install --cask libreoffice
       - run: uv run pytest
       - run: uv run python scripts/check_release.py
+      - name: Build native Mac app
+        if: runner.os == 'macOS'
+        run: |
+          uv sync --frozen --extra dev --extra build
+          uv run python scripts/build_macos.py
+      - name: Browser and packaged-app acceptance on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          uv run --with playwright python -m playwright install chromium
+          uv run --with playwright python scripts/verify_macos_bundle.py "dist/macos-$(uname -m)/昭濂个人履历库.app"
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'macOS' && success()
+        with:
+          name: macos-${{ runner.arch }}
+          path: |
+            dist/macos-*/*.zip
+            dist/macos-*/SHA256SUMS.txt
+          retention-days: 30

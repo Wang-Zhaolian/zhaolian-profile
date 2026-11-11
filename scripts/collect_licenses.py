@@ -1,4 +1,4 @@
-"""Collect original third-party notices for the Windows distribution."""
+"""Collect original third-party notices for native desktop distributions."""
 from __future__ import annotations
 import importlib.metadata
 import json
@@ -36,7 +36,10 @@ def main():
                          "notices": notices})
     python_folder = output / "Python"
     python_folder.mkdir(exist_ok=True)
-    python_notice = next((p for p in (Path(sys.base_prefix) / "LICENSE.txt", Path(sys.base_prefix) / "LICENSE") if p.is_file()), None)
+    base = Path(sys.base_prefix)
+    python_notice = next((p for p in (base / 'LICENSE.txt', base / 'LICENSE',
+        base / f'lib/python{sys.version_info.major}.{sys.version_info.minor}/LICENSE.txt',
+        base / f'lib/python{sys.version_info.major}.{sys.version_info.minor}/LICENSE') if p.is_file()), None)
     if python_notice is None:
         raise RuntimeError("Python runtime license was not found")
     shutil.copyfile(python_notice, python_folder / "LICENSE.txt")

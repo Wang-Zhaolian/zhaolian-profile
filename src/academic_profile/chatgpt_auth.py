@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import secrets
+import sys
 import tempfile
 import threading
 import time
@@ -157,11 +158,72 @@ class WindowsDPAPI:
         return self._transform(contents, protect=False)
 
 
+class MacKeychainProtector:
+    """Encrypt the atomic credential file using a key held only in Keychain."""
+
+    _SERVICE = 'com.wangzhaolian.zhaolian-profile'
+    _ACCOUNT = 'credential-encryption-key-v1'
+    _PREFIX = b'ZLP-MAC1:'
+
+    def __init__(self, backend=None):
+        if backend is None:
+            try:
+                from keyring.backends.macOS import Keyring
+                backend = Keyring()
+            except Exception:
+                raise AIServiceError('无法使用 Mac 钥匙串；手工录入仍可用，请检查系统钥匙串权限。', 'secure_storage_unavailable') from None
+        self.backend = backend
+
+    def _key(self, create: bool) -> bytes:
+        try:
+            value = self.backend.get_password(self._SERVICE, self._ACCOUNT)
+            if value is None and create:
+                value = base64.b64encode(secrets.token_bytes(32)).decode('ascii')
+                self.backend.set_password(self._SERVICE, self._ACCOUNT, value)
+            if not value:
+                raise ValueError('missing key')
+            key = base64.b64decode(value, validate=True)
+            if len(key) != 32:
+                raise ValueError('invalid key')
+            return key
+        except Exception:
+            raise AIServiceError('无法读取 Mac 钥匙串中的登录保护信息。请解锁钥匙串；换电脑后需要重新授权。', 'secure_storage_unavailable') from None
+
+    def protect(self, contents: bytes) -> bytes:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        nonce = secrets.token_bytes(12)
+        return self._PREFIX + nonce + AESGCM(self._key(True)).encrypt(nonce, contents, self._PREFIX)
+
+    def unprotect(self, contents: bytes) -> bytes:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        if not contents.startswith(self._PREFIX):
+            raise AIServiceError('此登录文件不是 Mac 本机加密的文件，请在 Mac 上重新登录。', 'secure_storage_unavailable')
+        payload = contents[len(self._PREFIX):]
+        try:
+            return AESGCM(self._key(False)).decrypt(payload[:12], payload[12:], self._PREFIX)
+        except AIServiceError:
+            raise
+        except Exception:
+            raise AIServiceError('Mac 登录信息无法解密，请重新授权。', 'secure_storage_unavailable') from None
+
+
+class UnavailableProtector:
+    def __init__(self, message='此系统尚未配置安全登录存储；手工录入仍可用。'):
+        self.message = message
+
+    def protect(self, contents: bytes) -> bytes:
+        raise AIServiceError(self.message, 'secure_storage_unavailable')
+
+    unprotect = protect
+
+
 def default_auth_home() -> Path:
+    if sys.platform == 'darwin':
+        return Path.home() / 'Library/Application Support/ZhaolianProfile/chatgpt'
     local_app_data = os.environ.get("LOCALAPPDATA")
-    if os.name != "nt" or not local_app_data:
-        raise AIServiceError("无法找到 Windows 用户数据目录，AI 登录已停用。", "secure_storage_unavailable")
-    return Path(local_app_data) / "AcademicProfile" / "chatgpt"
+    if os.name == 'nt' and local_app_data:
+        return Path(local_app_data) / "AcademicProfile" / "chatgpt"
+    return Path.home() / '.local/share/ZhaolianProfile/chatgpt'
 
 
 class ChatGPTAuth:
@@ -170,7 +232,10 @@ class ChatGPTAuth:
     def __init__(self, home: Path | None = None, *, protector: Any | None = None) -> None:
         self.home = Path(home) if home is not None else default_auth_home()
         self._file = self.home / "auth.bin"
-        self._protector = protector if protector is not None else WindowsDPAPI()
+        try:
+            self._protector = protector if protector is not None else (WindowsDPAPI() if os.name == 'nt' else MacKeychainProtector() if sys.platform == 'darwin' else UnavailableProtector())
+        except AIServiceError as exc:
+            self._protector = UnavailableProtector(str(exc))
         self._lock = threading.RLock()
         self._pending: dict[str, Any] | None = None
 
@@ -179,7 +244,23 @@ class ChatGPTAuth:
         """Serialize rotating refresh tokens across local service processes."""
         with self._lock:
             if os.name != "nt":
-                yield
+                import fcntl
+                self.home.mkdir(parents=True, exist_ok=True, mode=0o700)
+                with (self.home / 'credentials.lock').open('a+b') as stream:
+                    os.chmod(stream.name, 0o600)
+                    deadline = time.monotonic() + 30
+                    while True:
+                        try:
+                            fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                            break
+                        except BlockingIOError:
+                            if time.monotonic() >= deadline:
+                                raise AIServiceError('登录信息正在被其他进程使用，请稍后重试。', 'storage_busy') from None
+                            time.sleep(.05)
+                    try:
+                        yield
+                    finally:
+                        fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
                 return
             kernel32 = ctypes.WinDLL("kernel32.dll", use_last_error=True)
             kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, ctypes.c_wchar_p]

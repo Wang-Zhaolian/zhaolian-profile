@@ -5,18 +5,46 @@ import json
 import os
 import tempfile
 import uuid
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 
 import yaml
 
 from .categories import default_registry
+from .resources import resource_root
+
+
+def portable_home() -> Path | None:
+    """A relative library locator survives moving the complete folder."""
+    executable_root = Path(sys.executable).resolve().parent if getattr(sys, 'frozen', False) else resource_root()
+    for parent in (executable_root, *executable_root.parents):
+        marker = parent / 'portable-library.json'
+        if not marker.exists():
+            continue
+        value = json.loads(marker.read_text(encoding='utf-8'))
+        relative = value.get('library', '')
+        if not isinstance(relative, str) or not relative or Path(relative).is_absolute():
+            raise RuntimeError('便携资料库配置不正确，请检查 portable-library.json。')
+        target = (parent / relative).resolve()
+        if not target.is_relative_to(parent.resolve()) or not (target / 'data/basics.yaml').is_file():
+            raise RuntimeError('没有找到随文件夹保存的个人资料，请完整复制文件夹，不要单独移动启动程序。')
+        identity = json.loads((target / 'private/library.local.json').read_text(encoding='utf-8'))
+        if identity.get('library_id') != value.get('library_id'):
+            raise RuntimeError('便携资料库标识不匹配，请核对迁移文件夹。')
+        return target
+    return None
 
 
 def default_home() -> Path:
     override = os.environ.get("ZHAOLIAN_PROFILE_HOME")
     if override:
         return Path(override).expanduser().resolve()
+    portable = portable_home()
+    if portable:
+        return portable
+    if sys.platform == 'darwin':
+        return Path.home() / 'Library/Application Support/ZhaolianProfile'
     base = Path(os.environ.get("LOCALAPPDATA", Path.home() / ".local" / "share"))
     return base / "ZhaolianProfile"
 

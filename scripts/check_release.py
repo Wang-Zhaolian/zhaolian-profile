@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-FORBIDDEN = {"data", "private", "evidence", "output", ".runtime", ".venv", "dist", "build", "tmp"}
+FORBIDDEN = {"data", "private", "evidence", "output", ".runtime", ".venv", "dist", "build", "tmp", "个人资料", "启动程序", "portable-library.json"}
 SECRET = re.compile(rb"\b(?:gh[pousr]_[A-Za-z0-9_]{25,}|github_pat_[A-Za-z0-9_]{30,}|sk-(?:proj-)?[A-Za-z0-9_-]{30,})\b")
 
 

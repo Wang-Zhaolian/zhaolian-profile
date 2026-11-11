@@ -27,6 +27,8 @@ def test_partial_existing_library_is_not_overwritten(tmp_path):
 
 
 def test_default_home_is_outside_install_directory(tmp_path, monkeypatch):
+    monkeypatch.setattr('academic_profile.library.portable_home', lambda: None)
+    monkeypatch.setattr('academic_profile.library.sys.platform', 'win32')
     monkeypatch.delenv("ZHAOLIAN_PROFILE_HOME", raising=False)
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     assert default_home() == tmp_path / "ZhaolianProfile"

@@ -124,6 +124,9 @@ def _office_script() -> Path:
 
 
 def _office_to_pdf(source: Path, output: Path) -> None:
+    if os.name != 'nt':
+        _libreoffice_to_pdf(source, output)
+        return
     powershell = shutil.which("powershell.exe") or shutil.which("powershell")
     script = _office_script()
     if not powershell or not script.is_file():
@@ -147,6 +150,46 @@ def _office_to_pdf(source: Path, output: Path) -> None:
         raise ValueError("本机 Office 转 PDF 失败。请检查文件能否在 Office 打开，或手动另存为 PDF 后上传。")
     if output.stat().st_size > MAX_FILE_BYTES:
         raise ValueError("转换后的 PDF 超过 50 MB。请拆分文件后分批上传。")
+
+
+def _libreoffice_to_pdf(source: Path, output: Path) -> None:
+    executable = shutil.which('soffice') or shutil.which('libreoffice')
+    if not executable and sys.platform == 'darwin':
+        executable = next((str(path) for path in (
+            Path('/Applications/LibreOffice.app/Contents/MacOS/soffice'),
+            Path.home() / 'Applications/LibreOffice.app/Contents/MacOS/soffice') if path.is_file()), None)
+    if not executable:
+        raise ValueError('Office 文档转换需要安装 LibreOffice；也可以先把文档另存为 PDF 再上传。文字、图片和 PDF 不受影响。')
+    import signal
+    with tempfile.TemporaryDirectory(prefix='zhaolian-convert-') as temporary:
+        directory = Path(temporary)
+        profile = directory / 'profile'
+        (profile / 'user').mkdir(parents=True)
+        (profile / 'user/registrymodifications.xcu').write_text(
+            '<?xml version="1.0" encoding="UTF-8"?><oor:items xmlns:oor="http://openoffice.org/2001/registry">'
+            '<item oor:path="/org.openoffice.Office.Common/Security/Scripting">'
+            '<prop oor:name="MacroSecurityLevel" oor:op="fuse"><value>3</value></prop></item></oor:items>', encoding='utf-8')
+        command = [executable, '-env:UserInstallation=' + profile.as_uri(), '--headless', '--nologo',
+                   '--nodefault', '--norestore', '--convert-to', 'pdf', '--outdir', str(directory), str(source)]
+        try:
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+            try:
+                process.communicate(timeout=120)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.communicate()
+                raise ValueError('文档转 PDF 超时，请拆分文档或手动另存为 PDF。') from None
+        except OSError:
+            raise ValueError('无法启动 LibreOffice，请检查安装或手动另存为 PDF。') from None
+        converted = directory / (source.stem + '.pdf')
+        if process.returncode != 0 or not converted.is_file():
+            raise ValueError('LibreOffice 转换失败，请检查原件或手动另存为 PDF。')
+        if converted.stat().st_size > MAX_FILE_BYTES:
+            raise ValueError('转换后的 PDF 超过 50 MB，请拆分文件。')
+        with converted.open('rb') as stream:
+            if stream.read(5) != b'%PDF-':
+                raise ValueError('转换结果不是有效 PDF，请手动另存为 PDF。')
+        shutil.copyfile(converted, output)
 
 
 def build_attachment_content(

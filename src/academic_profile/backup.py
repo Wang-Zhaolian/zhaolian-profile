@@ -22,7 +22,7 @@ from .library import atomic_json, file_lock, library_id
 from .loader import load_master_data
 
 STAGE_PATHS = ("data", "backup-manifest.json")
-PRIVATE_PATHS = ("private", "evidence", "output", ".runtime", "%LOCALAPPDATA%/AcademicProfile/chatgpt")
+PRIVATE_PATHS = ("private", "evidence", "output", ".runtime", "%LOCALAPPDATA%/AcademicProfile/chatgpt", "~/Library/Application Support/ZhaolianProfile/chatgpt")
 _REPOSITORY = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}")
 _LOCK = threading.RLock()
 
